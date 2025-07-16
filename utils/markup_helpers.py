@@ -41,39 +41,38 @@ def create_main_keyboard(lang_code: str) -> types.ReplyKeyboardMarkup:
 
 async def create_dialogs_menu_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     """Создает клавиатуру для управления диалогами."""
-    markup = types.InlineKeyboardMarkup(row_width=2)
+    markup = types.InlineKeyboardMarkup(row_width=3)
     lang_code = await db_manager.get_user_language(user_id)
     dialogs = await db_manager.get_user_dialogs(user_id)
+    active_dialog_id = await db_manager.get_active_dialog_id(user_id)
 
-    dialog_buttons = []
-    active_dialog_id = None
-    # Диалоги уже содержат active_dialog_id, находим его
-    for dialog in dialogs:
-        if dialog['dialog_id'] == dialog['active_dialog_id']:
-            active_dialog_id = dialog['dialog_id']
-            break
-
+    # Добавляем кнопки для каждого диалога
     for dialog in dialogs:
         is_active = dialog['dialog_id'] == active_dialog_id
+
+        # Кнопка с названием диалога (для переключения)
         button_text = f"✅ {dialog['name']}" if is_active else dialog['name']
         callback_data = CALLBACK_IGNORE if is_active else f"{CALLBACK_DIALOG_SWITCH_PREFIX}{dialog['dialog_id']}"
-        dialog_buttons.append(types.InlineKeyboardButton(button_text, callback_data=callback_data))
+        dialog_button = types.InlineKeyboardButton(button_text, callback_data=callback_data)
 
-    # Добавляем кнопки диалогов по одной в ряд
-    for button in dialog_buttons:
-        markup.add(button)
+        # Кнопки управления для этого диалога
+        rename_button = types.InlineKeyboardButton("✏️", callback_data=f"{CALLBACK_DIALOG_RENAME_PREFIX}{dialog['dialog_id']}")
 
-    # Добавляем кнопки управления внизу, если есть активный диалог
-    if active_dialog_id:
-        control_buttons = [
-            types.InlineKeyboardButton(loc.get_text('btn_create_dialog', lang_code), callback_data=CALLBACK_DIALOG_CREATE),
-            types.InlineKeyboardButton(loc.get_text('btn_rename_dialog', lang_code), callback_data=f"{CALLBACK_DIALOG_RENAME_PREFIX}{active_dialog_id}"),
-            types.InlineKeyboardButton(loc.get_text('btn_delete_dialog', lang_code), callback_data=f"{CALLBACK_DIALOG_DELETE_PREFIX}{active_dialog_id}")
-        ]
-        markup.row(*control_buttons)
+        # Кнопку удаления показываем только для НЕактивных диалогов
+        if not is_active:
+            delete_button = types.InlineKeyboardButton("❌", callback_data=f"{CALLBACK_DIALOG_DELETE_PREFIX}{dialog['dialog_id']}")
+            markup.row(dialog_button, rename_button, delete_button)
+        else:
+            # Для активного диалога кнопка удаления отсутствует
+            markup.row(dialog_button, rename_button)
+
+    # Общая кнопка для создания нового диалога
+    markup.add(types.InlineKeyboardButton(
+        "➕ " + loc.get_text('btn_create_dialog', lang_code),
+        callback_data=CALLBACK_DIALOG_CREATE
+    ))
 
     return markup
-
 
 def create_confirm_delete_keyboard(dialog_id: int, lang_code: str) -> types.InlineKeyboardMarkup:
     """Создает клавиатуру для подтверждения удаления диалога."""
