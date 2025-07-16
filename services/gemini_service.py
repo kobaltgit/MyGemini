@@ -4,9 +4,11 @@ import PIL.Image
 from typing import List, Union, Dict, Optional, Any
 from io import BytesIO
 import base64
+import re
 from cachetools import LRUCache
 
 from config.settings import GEMINI_MODEL_NAME, GENERATION_CONFIG, SAFETY_SETTINGS, BOT_PERSONAS, BOT_STYLES
+from utils import guide_manager
 from logger_config import get_logger
 from database import db_manager
 from .error_parser import get_user_friendly_error_key
@@ -63,7 +65,6 @@ async def _get_dialog_chat_history(dialog_id: int) -> List[Dict[str, Any]]:
     """
     Возвращает или создает историю чата для диалога из кэша или БД.
     """
-    global dialog_chats_cache
     if dialog_id not in dialog_chats_cache:
         gemini_logger.debug(f"Кэш истории для dialog_id: {dialog_id} не найден. Загрузка из БД.")
         history_from_db = await db_manager.get_conversation_history(dialog_id, limit=20)
@@ -77,35 +78,60 @@ async def _get_dialog_chat_history(dialog_id: int) -> List[Dict[str, Any]]:
 
 def reset_dialog_chat(dialog_id: int):
     """Сбрасывает историю чата для конкретного диалога в кэше."""
-    global dialog_chats_cache
     if dialog_id in dialog_chats_cache:
         del dialog_chats_cache[dialog_id]
         gemini_logger.info(f"История чата в кэше для dialog_id: {dialog_id} сброшена.")
 
 async def _get_system_instruction_text(user_id: int) -> Optional[str]:
     """
-    Формирует текст системной инструкции на основе персоны и стиля пользователя.
+    Формирует полный текст системной инструкции, включая персону/стиль
+    и полное руководство по функциям бота.
     """
     lang_code = await db_manager.get_user_language(user_id)
+    
+    # --- Часть 1: Инструкция по поведению (персона или стиль) ---
+    persona_prompt = ""
     persona_id = await db_manager.get_user_persona(user_id)
 
     if persona_id != 'default':
         persona_info = BOT_PERSONAS.get(persona_id, BOT_PERSONAS['default'])
         prompt_key = f"prompt_{lang_code}"
-        prompt_text = persona_info.get(prompt_key, persona_info.get('prompt_ru', ''))
-        return prompt_text.strip() if prompt_text else None
+        persona_prompt = persona_info.get(prompt_key, persona_info.get('prompt_ru', ''))
+    else:
+        style_id = await db_manager.get_user_bot_style(user_id)
+        if style_id != 'default':
+            style_prompts = {
+                'formal': "You must answer in a strictly formal and business-like manner.",
+                'informal': "You should communicate in a friendly and informal way.",
+                'concise': "Your answers must be as short and to the point as possible.",
+                'detailed': "Provide detailed and comprehensive answers, explaining all aspects."
+            }
+            persona_prompt = style_prompts.get(style_id, "")
 
-    style_id = await db_manager.get_user_bot_style(user_id)
-    if style_id != 'default':
-        style_prompts = {
-            'formal': "You must answer in a strictly formal and business-like manner.",
-            'informal': "You should communicate in a friendly and informal way.",
-            'concise': "Your answers must be as short and to the point as possible.",
-            'detailed': "Provide detailed and comprehensive answers, explaining all aspects."
-        }
-        return style_prompts.get(style_id)
+    # --- Часть 2: Справка по боту для ответов на вопросы о себе ---
+    full_guide_text = guide_manager.get_full_guide(lang_code)
+    
+    # Удаляем Markdown ссылки с картинками, чтобы не загромождать контекст
+    full_guide_text = re.sub(r'!\[.*?\]\(.*?\)', '', full_guide_text)
 
-    return None
+    guide_prompt_template_ru = f"""
+---
+Дополнительный контекст: Ты — Telegram-бот, и у тебя есть встроенные функции, описанные ниже. Используй эту информацию, чтобы отвечать на вопросы пользователя о твоих возможностях, командах или процессе получения API-ключа. Всегда отвечай от первого лица ("Я могу...", "Используй команду /settings...").
+
+{full_guide_text}
+---
+"""
+    # В будущем можно добавить английский шаблон
+    guide_prompt = guide_prompt_template_ru.strip()
+
+    # --- Сборка финального промпта ---
+    final_prompt = ""
+    if persona_prompt:
+        final_prompt += persona_prompt.strip() + "\n\n"
+    
+    final_prompt += guide_prompt
+    
+    return final_prompt.strip() if final_prompt else None
 
 async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL.Image.Image]]]) -> str:
     """
@@ -143,7 +169,8 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
                 item.save(buffered, format="JPEG")
                 img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
                 user_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_str}})
-        user_parts.append({"text": text_part})
+        if text_part:
+            user_parts.append({"text": text_part})
         user_message_for_db = f"[Изображение] {text_part}".strip()
 
     request_contents.append({"role": "user", "parts": user_parts})
@@ -192,7 +219,8 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
         )
         return response_text
     except GeminiAPIError as e:
-        if history: history.pop()
+        if history and request_contents:
+            history.pop() # Удаляем последний (неудачный) запрос пользователя из кэша
         raise e
 
 async def generate_content_simple(api_key: str, prompt: str) -> str:

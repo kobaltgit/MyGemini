@@ -5,6 +5,7 @@ from telebot import types
 from . import telegram_helpers as tg_helpers
 from utils import markup_helpers as mk
 from utils import localization as loc
+from utils import guide_manager
 
 from config.settings import (
     STATE_WAITING_FOR_HISTORY_DATE,
@@ -191,11 +192,40 @@ async def handle_usage(message: types.Message, bot: AsyncTeleBot):
     report_text += loc.get_text('usage_cost_notice', lang_code)
     await bot.send_message(user_id, report_text, parse_mode='Markdown')
 
+# --- НОВЫЕ ОБРАБОТЧИКИ ДЛЯ СПРАВКИ ---
+
+async def handle_full_guide(message: types.Message, bot: AsyncTeleBot):
+    """Обработчик команды /help_guide, отправляет полную справку."""
+    user_id = message.chat.id
+    lang_code = await db_manager.get_user_language(user_id)
+    
+    # Отправляем typing action, так как отправка может занять время
+    await tg_helpers.send_typing_action(bot, user_id)
+    
+    guide_text = guide_manager.get_full_guide(lang_code)
+    await tg_helpers.send_long_message(bot, user_id, guide_text, parse_mode='Markdown')
+
+
+async def handle_api_key_info(message: types.Message, bot: AsyncTeleBot):
+    """Обработчик команды /apikey_info, отправляет секцию про API ключ."""
+    user_id = message.chat.id
+    lang_code = await db_manager.get_user_language(user_id)
+
+    await tg_helpers.send_typing_action(bot, user_id)
+    
+    guide_text = guide_manager.get_guide_section('API_KEY', lang_code)
+    await tg_helpers.send_long_message(bot, user_id, guide_text, parse_mode='Markdown')
 
 def register_command_handlers(bot: AsyncTeleBot):
     """Регистрирует все обработчики команд и кнопок-синонимов."""
     bot.register_message_handler(handle_start, commands=['start'], pass_bot=True)
     bot.register_message_handler(handle_help, commands=['help'], pass_bot=True)
+
+    # --- НОВЫЕ КОМАНДЫ ---
+    bot.register_message_handler(handle_full_guide, commands=['help_guide', 'guide'], pass_bot=True)
+    bot.register_message_handler(handle_api_key_info, commands=['apikey_info', 'key_info'], pass_bot=True)
+    # ---------------------
+
     bot.register_message_handler(handle_reset, commands=['reset'], pass_bot=True)
     bot.register_message_handler(handle_set_api_key, commands=['set_api_key', 'setapikey'], pass_bot=True)
     bot.register_message_handler(handle_settings, commands=['settings'], pass_bot=True)

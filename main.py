@@ -6,9 +6,12 @@ from telebot.async_telebot import AsyncTeleBot
 from telebot.asyncio_storage import StateMemoryStorage
 
 from logger_config import setup_logging, get_logger
+from utils import guide_manager
 
 setup_logging()
 main_logger = get_logger(__name__)
+
+guide_manager.load_guides()
 
 try:
     from config import settings

@@ -6,23 +6,20 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
     'ru': {
         # --- Приветствие и Помощь ---
         'welcome': "👋 Привет, *{name}*! Я твой личный ассистент на базе Gemini.\n\n"
-                   "Для работы мне понадобится твой Google AI API ключ. "
-                   "Пожалуйста, установи его с помощью команды /set_api_key.\n\n"
-                   "После этого ты сможешь:\n"
-                   "🧠 Отвечать на вопросы и генерировать тексты.\n"
-                   "🖼️ Анализировать изображения (просто отправь картинку).\n"
-                   "🇷🇺 Переводить текст (кнопка 'Перевести').\n"
-                   "📜 Смотреть историю диалога (кнопка 'История').\n\n"
-                   "Используй /help для получения справки.",
-        'cmd_help_text': "🆘 *Справка по боту*\n\n"
-                         "*/start* - Перезапустить бота и сбросить контекст.\n"
-                         "*/reset* - Сбросить контекст текущего диалога, не меняя настроек.\n"
-                         "*/set_api_key* (или */setapikey*) - Установить или обновить ваш API ключ от Google AI.\n"
-                         "*/settings* - Открыть меню настроек (стиль общения, язык, API ключ).\n"
-                         "*/dialogs* - Управление диалогами (создание, переключение, удаление).\n" # НОВЫЙ ПУНКТ
-                         "*/history* - Посмотреть историю сообщений за определенную дату.\n"
-                         "*/translate* - Перевести текст на другой язык.\n"
-                         "*/usage* - Посмотреть статистику использования токенов за сегодня и за месяц.",
+           "Для начала работы мне понадобится твой Google AI API ключ. "
+           "Если ты не знаешь, что это и как его получить, воспользуйся новой подробной командой: /apikey_info\n\n"
+           "✅ После установки ключа через /set_api_key ты сможешь полноценно общаться со мной.\n\n"
+           "Используй /help_guide, чтобы увидеть полный список моих возможностей.",
+        'cmd_help_text': "🆘 *Краткая справка по командам*\n\n"
+                 "*/start* - Перезапустить бота.\n"
+                 "*/reset* - Сбросить контекст текущего диалога.\n"
+                 "*/set_api_key* - Установить или обновить API ключ.\n"
+                 "*/settings* - Открыть меню настроек.\n"
+                 "*/dialogs* - Управление диалогами.\n"
+                 "*/history* - Посмотреть историю сообщений.\n"
+                 "*/usage* - Статистика расходов токенов.\n\n"
+                 "➡️ Используй /help_guide для получения **полного руководства** по всем функциям.\n"
+                 "🔑 Используй /apikey_info для получения инструкции по **созданию API ключа**.",
         # --- Настройки ---
         'settings_title': "⚙️ *Настройки бота*",
         'settings_style_section': "--- Стиль общения бота ---",
@@ -120,23 +117,20 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
     'en': {
         # --- Welcome and Help ---
         'welcome': "👋 Hi, *{name}*! I'm your personal assistant powered by Gemini.\n\n"
-                   "To get started, I'll need your Google AI API key. "
-                   "Please set it using the /set_api_key command.\n\n"
-                   "After that, you'll be able to:\n"
-                   "🧠 Answer questions and generate text.\n"
-                   "🖼️ Analyze images (just send a picture).\n"
-                   "🇬🇧 Translate text (the 'Translate' button).\n"
-                   "📜 View conversation history (the 'History' button).\n\n"
-                   "Use /help to get assistance.",
-        'cmd_help_text': "🆘 *Bot Help*\n\n"
-                         "*/start* - Restart the bot and clear the context.\n"
-                         "*/reset* - Clear the context of the current conversation without changing settings.\n"
-                         "*/set_api_key* (or */setapikey*) - Set or update your Google AI API key.\n"
-                         "*/settings* - Open the settings menu (communication style, language, API key).\n"
-                         "*/dialogs* - Manage dialogs (create, switch, delete).\n" # NEW ITEM
-                         "*/history* - View message history for a specific date.\n"
-                         "*/translate* - Translate text to another language.\n"
-                         "*/usage* - View token usage statistics for today and this month.",
+           "To get started, I'll need your Google AI API key. "
+           "If you don't know what it is or how to get it, use the new detailed command: /apikey_info\n\n"
+           "✅ After setting the key via /set_api_key, you'll be able to chat with me.\n\n"
+           "Use /help_guide to see a full list of my features.",
+        'cmd_help_text': "🆘 *Quick Command Reference*\n\n"
+                 "*/start* - Restart the bot.\n"
+                 "*/reset* - Clear the current dialog context.\n"
+                 "*/set_api_key* - Set or update your API key.\n"
+                 "*/settings* - Open the settings menu.\n"
+                 "*/dialogs* - Manage your dialogs.\n"
+                 "*/history* - View message history.\n"
+                 "*/usage* - Token usage statistics.\n\n"
+                 "➡️ Use /help_guide for the **full user manual**.\n"
+                 "🔑 Use /apikey_info for instructions on **creating an API key**.",
         # --- Settings ---
         'settings_title': "⚙️ *Bot Settings*",
         'settings_style_section': "--- Bot Communication Style ---",
