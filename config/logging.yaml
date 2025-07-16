@@ -1,5 +1,11 @@
+# File: config/logging.yaml
 version: 1
 disable_existing_loggers: False
+
+# Регистрируем наш кастомный фильтр, чтобы YAML мог его найти
+filters:
+  user_id_filter:
+    (): logger_config.UserIdContextFilter
 
 formatters:
   standard:
@@ -15,6 +21,8 @@ handlers:
     level: DEBUG
     formatter: standard
     stream: ext://sys.stdout
+    # Применяем фильтр ко всем обработчикам, использующим форматтер 'standard'
+    filters: [user_id_filter]
 
   file_general:
     class: logging.handlers.RotatingFileHandler
@@ -24,6 +32,7 @@ handlers:
     maxBytes: 10485760
     backupCount: 5
     encoding: utf-8
+    filters: [user_id_filter] # <-- ДОБАВЛЕНО
 
   file_gemini:
     class: logging.handlers.RotatingFileHandler
@@ -33,6 +42,7 @@ handlers:
     maxBytes: 5242880
     backupCount: 3
     encoding: utf-8
+    filters: [user_id_filter] # <-- ДОБАВЛЕНО
 
   file_database:
     class: logging.handlers.RotatingFileHandler
@@ -42,6 +52,7 @@ handlers:
     maxBytes: 5242880
     backupCount: 3
     encoding: utf-8
+    filters: [user_id_filter] # <-- ДОБАВЛЕНО
 
   file_user_messages:
     class: logging.handlers.RotatingFileHandler
@@ -51,9 +62,9 @@ handlers:
     maxBytes: 10485760
     backupCount: 5
     encoding: utf-8
+    filters: [user_id_filter] # <-- ДОБАВЛЕНО
 
-# УДАЛЯЕМ ОБРАБОТЧИК file_reminders
-
+# Определяем логгеры
 loggers:
   gemini_api:
     level: DEBUG
@@ -70,19 +81,26 @@ loggers:
     handlers: [console, file_user_messages]
     propagate: no
 
-  # УДАЛЯЕМ ЛОГГЕР reminders
+  # Логгер для telebot, чтобы отлавливать его сообщения
+  telebot:
+    level: INFO
+    handlers: [console, file_general]
+    propagate: no
 
+  # Логгер для aiohttp, если понадобится отладка
+  aiohttp:
+    level: WARNING
+    handlers: [console, file_general]
+    propagate: no
+
+  # Логгер для __main__
   __main__:
     level: INFO
     handlers: [console, file_general]
     propagate: no
 
-  default_logger:
-      level: INFO
-      handlers: [console, file_general]
-      propagate: no
-
+# Настройки для корневого логгера
 root:
   level: WARNING
+  # Используем обработчик с фильтром, на случай если какой-то логгер не настроен и провалится в root
   handlers: [console, file_general]
-  formatter: simple
