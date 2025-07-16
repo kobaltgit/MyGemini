@@ -49,12 +49,17 @@ async def send_long_message(bot: AsyncTeleBot, chat_id: int, text: str, **kwargs
 
 async def send_error_reply(bot: AsyncTeleBot, message: types.Message, error_log_message: str,
                            user_reply_text: str = "Произошла внутренняя ошибка. Попробуйте позже."):
-    """Логирует ошибку и отправляет пользователю стандартизированный ответ."""
+    """
+    Логирует ошибку и отправляет пользователю стандартизированный ответ.
+    Использует send_message вместо reply_to для большей надежности.
+    """
     user_id = message.chat.id
+    # Используем `extra` для передачи user_id в логгер
     logger.exception(error_log_message, extra={'user_id': str(user_id)})
 
     try:
-        await bot.reply_to(message, user_reply_text, parse_mode=None)
+        # Заменяем reply_to на send_message для избежания ошибок, если исходное сообщение удалено
+        await bot.send_message(user_id, user_reply_text, parse_mode=None)
     except apihelper.ApiException as e:
         logger.error(f"Не удалось отправить сообщение об ошибке пользователю {user_id}: {e}", extra={'user_id': str(user_id)})
 
@@ -63,7 +68,8 @@ async def send_error_reply(bot: AsyncTeleBot, message: types.Message, error_log_
             admin_notification = (f"⚠️ *Критическая ошибка у пользователя {user_id}* ⚠️\n\n"
                                   f"```\n{error_log_message}\n```\n\n"
                                   f"Сообщение пользователя: `{message.text or 'Не текстовое сообщение'}`")
-            await bot.send_message(ADMIN_USER_ID, admin_notification, parse_mode='Markdown')
+            # Используем send_long_message на случай, если сообщение об ошибке будет очень длинным
+            await send_long_message(bot, ADMIN_USER_ID, admin_notification, parse_mode='Markdown')
         except apihelper.ApiException as e:
             logger.error(f"Не удалось отправить уведомление об ошибке администратору: {e}", extra={'user_id': 'System'})
 

@@ -47,9 +47,9 @@ async def handle_any_message(message: types.Message, bot: AsyncTeleBot):
         else:
             lang_code = db_manager.get_user_language(user_id)
             await bot.reply_to(message, loc.get_text('unsupported_content', lang_code))
-    except Exception:
+    except Exception as e:
         # Логирование и ответ пользователю происходят внутри send_error_reply
-        await tg_helpers.send_error_reply(bot, message, f"Критическая ошибка в handle_any_message для user_id {user_id}")
+        await tg_helpers.send_error_reply(bot, message, f"Критическая ошибка в handle_any_message для user_id {user_id}: {e}")
         if user_id in user_states:
             user_states.pop(user_id, None)
 
@@ -97,15 +97,24 @@ async def handle_state_api_key(bot: AsyncTeleBot, message: types.Message):
 
     is_valid = await gemini_service.validate_api_key(api_key)
 
+    # Удаляем сообщение "Проверяю ключ..."
+    try:
+        await bot.delete_message(user_id, status_msg.message_id)
+    except Exception as e:
+        logger.warning(f"Не удалось удалить статусное сообщение для user {user_id}: {e}", extra={'user_id': str(user_id)})
+
+
     if is_valid:
         db_manager.set_user_api_key(user_id, api_key)
         user_states.pop(user_id, None)
         text = loc.get_text('api_key_success', lang_code)
-        await bot.edit_message_text(text, user_id, status_msg.message_id, reply_markup=mk.create_main_keyboard(lang_code))
+        # Отправляем новое сообщение с основной клавиатурой
+        await bot.send_message(user_id, text, reply_markup=mk.create_main_keyboard(lang_code))
     else:
         text = loc.get_text('api_key_invalid', lang_code)
         # Состояние не сбрасываем, чтобы пользователь мог попробовать еще раз
-        await bot.edit_message_text(text, user_id, status_msg.message_id)
+        # Отправляем новое сообщение об ошибке
+        await bot.send_message(user_id, text)
 
 
 async def handle_state_translate(bot: AsyncTeleBot, message: types.Message):
