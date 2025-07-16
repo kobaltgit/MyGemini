@@ -28,15 +28,15 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_language_section': "--- Язык интерфейса ---",
         'settings_api_key_section': "--- Управление API ключом ---",
         'settings_btn_set_api_key': "🔑 Установить/обновить API ключ",
-        'settings_model_section': "--- Нейросетевая модель ---", # <-- НОВАЯ СТРОКА
-        'settings_btn_choose_model': "🧠 Выбрать модель", # <-- НОВАЯ СТРОКА
+        'settings_model_section': "--- Нейросетевая модель ---",
+        'settings_btn_choose_model': "🧠 Выбрать модель",
         'style_changed_notice': "Стиль общения изменен. Контекст диалога сброшен.",
         # --- Выбор модели ---
-        'model_selection_title': "🧠 *Выбор модели Gemini*", # <-- НОВАЯ СТРОКА
-        'model_selection_loading': "⏳ Загружаю список доступных моделей...", # <-- НОВАЯ СТРОКА
-        'model_selection_error': "❌ Не удалось загрузить список моделей. Проверьте ваш API ключ или попробуйте позже.", # <-- НОВАЯ СТРОКА
-        'model_changed_notice': "✅ Модель изменена на *{model_name}*. Контекст диалога сброшен.", # <-- НОВАЯ СТРОКА
-        'btn_back_to_settings': "⬅️ Назад в настройки", # <-- НОВАЯ СТРОКА
+        'model_selection_title': "🧠 *Выбор модели Gemini*",
+        'model_selection_loading': "⏳ Загружаю список доступных моделей...",
+        'model_selection_error': "❌ Не удалось загрузить список моделей. Проверьте ваш API ключ или попробуйте позже.",
+        'model_changed_notice': "✅ Модель изменена на *{model_name}*. Контекст диалога сброшен.",
+        'btn_back_to_settings': "⬅️ Назад в настройки",
         # --- Команды и Состояния ---
         'cmd_reset_success': "✅ Контекст разговора и ваше текущее состояние сброшены.",
         'set_api_key_prompt': "Пожалуйста, отправьте ваш Google AI API ключ. Сообщение с ключом будет удалено.",
@@ -58,11 +58,18 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'history_role_bot': "Бот",
         'history_no_messages': "В этот день сообщений не найдено.",
         'history_date_error': "Произошла ошибка при обработке даты. Попробуйте еще раз.",
-        # --- Ошибки и уведомления ---
+        # --- Ошибки ---
         'unsupported_content': "Я пока не умею обрабатывать такой тип контента.",
         'state_wrong_content_type': "Пожалуйста, отправьте текст для завершения текущего действия или нажмите /reset.",
-        'gemini_error_response': "К сожалению, не удалось обработать ваш запрос. Пожалуйста, попробуйте переформулировать его или повторите попытку позже.",
         'translation_error_generic': "Не удалось выполнить перевод. Попробуйте еще раз.",
+        # --- Ошибки Gemini API (понятные пользователю) ---
+        'gemini_error_api_key_invalid': "🚫 *Ошибка: Неверный API-ключ.*\nПожалуйста, проверьте правильность вашего ключа и установите его заново с помощью /set_api_key.",
+        'gemini_error_permission_denied': "🚫 *Ошибка: Доступ запрещен.*\nУбедитесь, что ваш API-ключ активирован и имеет необходимые разрешения в Google AI Studio.",
+        'gemini_error_quota_exceeded': "⏳ *Ошибка: Превышена квота.*\nВы исчерпали лимит запросов к API. Попробуйте позже или проверьте лимиты в вашей учетной записи Google.",
+        'gemini_error_safety': "censored:censored_black_rectangle: *Ответ заблокирован.*\nСгенерированный ответ был заблокирован настройками безопасности Google. Попробуйте переформулировать запрос.",
+        'gemini_error_unavailable': "🛠️ *Сервис временно недоступен.*\nСерверы Google могут быть перегружены. Пожалуйста, повторите попытку через несколько минут.",
+        'gemini_error_invalid_argument': "🤔 *Ошибка: Некорректный запрос.*\nВозможно, вы пытаетесь отправить контент, который не поддерживается выбранной моделью (например, видео).",
+        'gemini_error_unknown': "🤯 *Произошла неизвестная ошибка при обращении к API.*\nПожалуйста, попробуйте еще раз. Если ошибка повторяется, свяжитесь с администратором.",
         # --- Кнопки ---
         'btn_translate': "🇷🇺 Перевести",
         'btn_history': "📜 История",
@@ -96,15 +103,15 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_language_section': "--- Interface Language ---",
         'settings_api_key_section': "--- API Key Management ---",
         'settings_btn_set_api_key': "🔑 Set/Update API Key",
-        'settings_model_section': "--- Neural Network Model ---", # <-- НОВАЯ СТРОКА
-        'settings_btn_choose_model': "🧠 Choose Model", # <-- НОВАЯ СТРОКА
+        'settings_model_section': "--- Neural Network Model ---",
+        'settings_btn_choose_model': "🧠 Choose Model",
         'style_changed_notice': "Communication style changed. The conversation context has been reset.",
         # --- Model Selection ---
-        'model_selection_title': "🧠 *Gemini Model Selection*", # <-- НОВАЯ СТРОКА
-        'model_selection_loading': "⏳ Loading list of available models...", # <-- НОВАЯ СТРОКА
-        'model_selection_error': "❌ Could not load the model list. Please check your API key or try again later.", # <-- НОВАЯ СТРОКА
-        'model_changed_notice': "✅ Model changed to *{model_name}*. The conversation context has been reset.", # <-- НОВАЯ СТРОКА
-        'btn_back_to_settings': "⬅️ Back to Settings", # <-- НОВАЯ СТРОКА
+        'model_selection_title': "🧠 *Gemini Model Selection*",
+        'model_selection_loading': "⏳ Loading list of available models...",
+        'model_selection_error': "❌ Could not load the model list. Please check your API key or try again later.",
+        'model_changed_notice': "✅ Model changed to *{model_name}*. The conversation context has been reset.",
+        'btn_back_to_settings': "⬅️ Back to Settings",
         # --- Commands and States ---
         'cmd_reset_success': "✅ The conversation context and your current state have been reset.",
         'set_api_key_prompt': "Please send your Google AI API key. The message with the key will be deleted.",
@@ -126,11 +133,18 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'history_role_bot': "Bot",
         'history_no_messages': "No messages found on this day.",
         'history_date_error': "An error occurred while processing the date. Please try again.",
-        # --- Errors and Notifications ---
+        # --- Errors ---
         'unsupported_content': "I don't know how to handle this type of content yet.",
         'state_wrong_content_type': "Please send text to complete the current action, or press /reset.",
-        'gemini_error_response': "Sorry, your request could not be processed. Please try to rephrase it or try again later.",
         'translation_error_generic': "Failed to perform translation. Please try again.",
+        # --- Gemini API Errors (User-Friendly) ---
+        'gemini_error_api_key_invalid': "🚫 *Error: Invalid API Key.*\nPlease check if your key is correct and set it again using /set_api_key.",
+        'gemini_error_permission_denied': "🚫 *Error: Permission Denied.*\nEnsure your API key is activated and has the necessary permissions in Google AI Studio.",
+        'gemini_error_quota_exceeded': "⏳ *Error: Quota Exceeded.*\nYou have exhausted your API request limit. Please try again later or check your limits in your Google account.",
+        'gemini_error_safety': "censored:censored_black_rectangle: *Response Blocked.*\nThe generated response was blocked by Google's safety settings. Please try rephrasing your request.",
+        'gemini_error_unavailable': "🛠️ *Service Temporarily Unavailable.*\nGoogle's servers might be overloaded. Please try again in a few minutes.",
+        'gemini_error_invalid_argument': "🤔 *Error: Invalid Request.*\nYou might be trying to send content that is not supported by the selected model (e.g., a video).",
+        'gemini_error_unknown': "🤯 *An unknown error occurred while contacting the API.*\nPlease try again. If the error persists, contact the administrator.",
         # --- Buttons ---
         'btn_translate': "🇬🇧 Translate",
         'btn_history': "📜 History",
@@ -149,11 +163,7 @@ def get_text(key: str, lang_code: str) -> str:
     Возвращает текст по ключу для указанного языка.
     Если ключ или язык не найден, возвращает ключ в виде строки.
     """
-    # Сначала пытаемся получить словарь для нужного языка
     lang_dict = LOCALIZATION.get(lang_code)
-    # Если его нет, берем словарь для языка по умолчанию
     if lang_dict is None:
         lang_dict = LOCALIZATION.get(DEFAULT_LANG, {})
-    # Возвращаем текст по ключу. Если его нет, возвращаем сам ключ,
-    # чтобы было легче отлаживать недостающие переводы.
     return lang_dict.get(key, key)

@@ -13,10 +13,11 @@ from config.settings import (
 )
 from database import db_manager
 from services import gemini_service
+from services.gemini_service import GeminiAPIError # Импортируем кастомное исключение
 from utils import markup_helpers as mk
 from utils import localization as loc
-from .states import user_states  # Импортируем состояния
-from . import telegram_helpers as tg_helpers # Импортируем хелперы
+from .states import user_states
+from . import telegram_helpers as tg_helpers
 
 from logger_config import get_logger
 
@@ -41,40 +42,36 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
     try:
         if data == CALLBACK_IGNORE:
             await tg_helpers.answer_callback_query(bot, call)
-
         elif data.startswith(CALLBACK_LANG_PREFIX):
             await handle_language_selection_for_translation(bot, call, lang_code)
-
         elif data.startswith(CALLBACK_SETTINGS_STYLE_PREFIX):
             await handle_style_setting(bot, call, lang_code)
-
         elif data.startswith(CALLBACK_SETTINGS_LANG_PREFIX):
             await handle_language_setting(bot, call)
-
         elif data == CALLBACK_SETTINGS_SET_API_KEY:
             await handle_set_api_key_from_settings(bot, call, lang_code)
-
         elif data == CALLBACK_SETTINGS_CHOOSE_MODEL_MENU:
             await handle_choose_model_menu(bot, call, lang_code)
-
         elif data.startswith(CALLBACK_SETTINGS_MODEL_PREFIX):
             await handle_model_selection(bot, call, lang_code)
-
         elif data == CALLBACK_SETTINGS_BACK_TO_MAIN:
             await handle_back_to_main_settings(bot, call, lang_code)
-
         elif data.startswith(CALLBACK_CALENDAR_DATE_PREFIX):
             await handle_calendar_date_selection(bot, call, lang_code)
-
         elif data.startswith(CALLBACK_CALENDAR_MONTH_PREFIX):
             await handle_calendar_month_navigation(bot, call)
-
         else:
             await tg_helpers.answer_callback_query(bot, call, text="Unknown action", show_alert=True)
-
+    except GeminiAPIError as e:
+        # Ловим ошибку и показываем пользователю
+        user_friendly_error = loc.get_text(e.error_key, lang_code)
+        await tg_helpers.answer_callback_query(bot, call, text=user_friendly_error, show_alert=True)
+        # Возвращаем пользователя в главное меню настроек, чтобы он не застрял
+        await handle_back_to_main_settings(bot, call, lang_code)
     except Exception as e:
         logger.exception(f"Критическая ошибка обработки callback query: {e}", extra={'user_id': str(user_id)})
         await tg_helpers.answer_callback_query(bot, call, text="An internal error occurred.", show_alert=True)
+
 
 # --- Обработчики конкретных колбэков ---
 
@@ -143,20 +140,21 @@ async def handle_choose_model_menu(bot: AsyncTeleBot, call: types.CallbackQuery,
         await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('api_key_needed_for_feature', lang_code), show_alert=True)
         return
 
-    # Показываем уведомление о загрузке
     await tg_helpers.edit_message_text_safe(
         bot, call.message.chat.id, call.message.message_id,
         text=loc.get_text('model_selection_loading', lang_code),
         reply_markup=None
     )
 
+    # Здесь может возникнуть GeminiAPIError, которая будет поймана выше
     models = await gemini_service.get_available_models(api_key)
     if not models:
         await tg_helpers.edit_message_text_safe(
             bot, call.message.chat.id, call.message.message_id,
-            text=loc.get_text('model_selection_error', lang_code),
-            reply_markup=mk.create_settings_keyboard(user_id) # Возвращаем на всякий случай
+            text=loc.get_text('model_selection_error', lang_code)
         )
+        # Возвращаем пользователя в главное меню настроек
+        await handle_back_to_main_settings(bot, call, lang_code)
         return
 
     current_model = db_manager.get_user_gemini_model(user_id)
@@ -176,13 +174,7 @@ async def handle_model_selection(bot: AsyncTeleBot, call: types.CallbackQuery, l
     db_manager.set_user_gemini_model(user_id, model_name)
     gemini_service.reset_user_chat(user_id)
 
-    # Возвращаемся в основное меню настроек
-    settings_markup = mk.create_settings_keyboard(user_id)
-    await tg_helpers.edit_message_text_safe(
-        bot, call.message.chat.id, call.message.message_id,
-        text=loc.get_text('settings_title', lang_code),
-        reply_markup=settings_markup
-    )
+    await handle_back_to_main_settings(bot, call, lang_code)
 
     await tg_helpers.answer_callback_query(
         bot, call,
