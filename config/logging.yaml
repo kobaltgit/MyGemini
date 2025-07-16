@@ -1,6 +1,5 @@
-# --- START OF FILE config/logging.yaml ---
 version: 1
-disable_existing_loggers: False # Не отключаем существующие логгеры
+disable_existing_loggers: False
 
 formatters:
   standard:
@@ -11,106 +10,79 @@ formatters:
     datefmt: '%Y-%m-%d %H:%M:%S'
 
 handlers:
-  # Обработчик для вывода в консоль (основной)
   console:
     class: logging.StreamHandler
-    level: DEBUG # Уровень логирования для консоли (можно изменить на DEBUG для большей детализации)
+    level: DEBUG
     formatter: standard
     stream: ext://sys.stdout
 
-  # Обработчик для записи ВСЕХ логов уровня INFO и выше в общий файл
   file_general:
     class: logging.handlers.RotatingFileHandler
     level: INFO
     formatter: standard
-    filename: logs/bot_general.log # Путь к общему файлу логов
-    maxBytes: 10485760 # 10MB
+    filename: logs/bot_general.log
+    maxBytes: 10485760
     backupCount: 5
     encoding: utf-8
 
-  # Обработчик для записи логов API Gemini
   file_gemini:
     class: logging.handlers.RotatingFileHandler
-    level: DEBUG # Детальное логирование для Gemini
+    level: DEBUG
     formatter: standard
-    filename: logs/gemini_api.log # Отдельный файл для Gemini
-    maxBytes: 5242880 # 5MB
+    filename: logs/gemini_api.log
+    maxBytes: 5242880
     backupCount: 3
     encoding: utf-8
 
-  # Обработчик для записи логов базы данных
   file_database:
     class: logging.handlers.RotatingFileHandler
-    level: DEBUG # Детальное логирование для БД
+    level: DEBUG
     formatter: standard
-    filename: logs/database.log # Отдельный файл для БД
-    maxBytes: 5242880 # 5MB
+    filename: logs/database.log
+    maxBytes: 5242880
     backupCount: 3
     encoding: utf-8
 
-  # Обработчик для записи логов сообщений пользователей
   file_user_messages:
     class: logging.handlers.RotatingFileHandler
     level: INFO
     formatter: standard
-    filename: logs/user_messages.log # Отдельный файл для сообщений пользователей
-    maxBytes: 10485760 # 10MB
+    filename: logs/user_messages.log
+    maxBytes: 10485760
     backupCount: 5
     encoding: utf-8
 
-  # Обработчик для записи логов системы напоминаний
-  file_reminders:
-    class: logging.handlers.RotatingFileHandler
-    level: INFO
-    formatter: standard
-    filename: logs/reminders.log # Отдельный файл для напоминаний
-    maxBytes: 2097152 # 2MB
-    backupCount: 3
-    encoding: utf-8
+# УДАЛЯЕМ ОБРАБОТЧИК file_reminders
 
-# Настройка конкретных логгеров
 loggers:
-  # Логгер для Gemini API
   gemini_api:
     level: DEBUG
-    handlers: [console, file_gemini] # Вывод в консоль и в свой файл
-    propagate: no # Не передавать сообщения корневому логгеру
+    handlers: [console, file_gemini]
+    propagate: no
 
-  # Логгер для базы данных
   database:
     level: DEBUG
-    handlers: [console, file_database] # Вывод в консоль и в свой файл
+    handlers: [console, file_database]
     propagate: no
 
-  # Логгер для сообщений пользователей
   user_messages:
     level: INFO
-    handlers: [console, file_user_messages] # Вывод в консоль и в свой файл
+    handlers: [console, file_user_messages]
     propagate: no
 
-  # Логгер для системы напоминаний
-  reminders:
-    level: INFO
-    handlers: [console, file_reminders] # Вывод в консоль и в свой файл
-    propagate: no
+  # УДАЛЯЕМ ЛОГГЕР reminders
 
-  # Логгер для основной логики бота (если не указан другой)
-  __main__: # Логгер для главного запускаемого файла
+  __main__:
     level: INFO
     handlers: [console, file_general]
     propagate: no
 
-  # Логгер по умолчанию для других модулей (например, утилит)
   default_logger:
       level: INFO
       handlers: [console, file_general]
       propagate: no
 
-
-# Корневой логгер (Root Logger) - будет ловить все, что не поймали другие
-# Оставляем его для отладки, но основные логгеры настроены выше
 root:
-  level: WARNING # Ловим только важные сообщения по умолчанию
-  handlers: [console, file_general] # Направляем в консоль и общий файл
+  level: WARNING
+  handlers: [console, file_general]
   formatter: simple
-# --- END OF FILE config/logging.yaml ---

@@ -13,7 +13,6 @@ ADMIN_USER_ID_STR = os.getenv("ADMIN_USER_ID")
 ADMIN_USER_ID = int(ADMIN_USER_ID_STR) if ADMIN_USER_ID_STR and ADMIN_USER_ID_STR.isdigit() else None
 
 # --- Gemini API Settings ---
-# Глобальный ключ больше не используется для работы бота, но может быть полезен для админа или тестов
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash-latest")
 
