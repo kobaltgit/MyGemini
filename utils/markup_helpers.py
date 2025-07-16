@@ -8,7 +8,8 @@ from config.settings import (
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_IGNORE,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX,
     CALLBACK_REPORT_ERROR, CALLBACK_LANG_PREFIX,
-    CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY
+    CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY,
+    CALLBACK_SETTINGS_CHOOSE_MODEL_MENU, CALLBACK_SETTINGS_MODEL_PREFIX, CALLBACK_SETTINGS_BACK_TO_MAIN
 )
 from database import db_manager
 from logger_config import get_logger
@@ -63,6 +64,14 @@ def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     )
     markup.add(api_key_button)
 
+    # --- Секция выбора модели ---
+    markup.add(types.InlineKeyboardButton(loc.get_text('settings_model_section', current_lang), callback_data=CALLBACK_IGNORE))
+    model_button = types.InlineKeyboardButton(
+        loc.get_text('settings_btn_choose_model', current_lang),
+        callback_data=CALLBACK_SETTINGS_CHOOSE_MODEL_MENU
+    )
+    markup.add(model_button)
+
     # --- Секция стиля общения ---
     markup.add(types.InlineKeyboardButton(loc.get_text('settings_style_section', current_lang), callback_data=CALLBACK_IGNORE))
     style_buttons = []
@@ -83,6 +92,26 @@ def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     ]
     markup.add(*lang_buttons)
 
+    return markup
+
+
+def create_model_selection_keyboard(models: List[Dict[str, str]], current_model: Optional[str], lang_code: str) -> types.InlineKeyboardMarkup:
+    """Создает клавиатуру для выбора модели Gemini."""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+
+    for model in models:
+        model_id = model['name']
+        display_name = model['display_name']
+        text = f"✅ {display_name}" if model_id == current_model else display_name
+        markup.add(types.InlineKeyboardButton(
+            text,
+            callback_data=f"{CALLBACK_SETTINGS_MODEL_PREFIX}{model_id}"
+        ))
+
+    markup.add(types.InlineKeyboardButton(
+        loc.get_text('btn_back_to_settings', lang_code),
+        callback_data=CALLBACK_SETTINGS_BACK_TO_MAIN
+    ))
     return markup
 
 

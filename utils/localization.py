@@ -26,9 +26,17 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_title': "⚙️ *Настройки бота*",
         'settings_style_section': "--- Стиль общения бота ---",
         'settings_language_section': "--- Язык интерфейса ---",
-        'settings_api_key_section': "--- Управление API ключом ---", # <-- НОВАЯ СТРОКА
-        'settings_btn_set_api_key': "🔑 Установить/обновить API ключ", # <-- НОВАЯ СТРОКА
+        'settings_api_key_section': "--- Управление API ключом ---",
+        'settings_btn_set_api_key': "🔑 Установить/обновить API ключ",
+        'settings_model_section': "--- Нейросетевая модель ---", # <-- НОВАЯ СТРОКА
+        'settings_btn_choose_model': "🧠 Выбрать модель", # <-- НОВАЯ СТРОКА
         'style_changed_notice': "Стиль общения изменен. Контекст диалога сброшен.",
+        # --- Выбор модели ---
+        'model_selection_title': "🧠 *Выбор модели Gemini*", # <-- НОВАЯ СТРОКА
+        'model_selection_loading': "⏳ Загружаю список доступных моделей...", # <-- НОВАЯ СТРОКА
+        'model_selection_error': "❌ Не удалось загрузить список моделей. Проверьте ваш API ключ или попробуйте позже.", # <-- НОВАЯ СТРОКА
+        'model_changed_notice': "✅ Модель изменена на *{model_name}*. Контекст диалога сброшен.", # <-- НОВАЯ СТРОКА
+        'btn_back_to_settings': "⬅️ Назад в настройки", # <-- НОВАЯ СТРОКА
         # --- Команды и Состояния ---
         'cmd_reset_success': "✅ Контекст разговора и ваше текущее состояние сброшены.",
         'set_api_key_prompt': "Пожалуйста, отправьте ваш Google AI API ключ. Сообщение с ключом будет удалено.",
@@ -86,9 +94,17 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_title': "⚙️ *Bot Settings*",
         'settings_style_section': "--- Bot Communication Style ---",
         'settings_language_section': "--- Interface Language ---",
-        'settings_api_key_section': "--- API Key Management ---", # <-- НОВАЯ СТРОКА
-        'settings_btn_set_api_key': "🔑 Set/Update API Key", # <-- НОВАЯ СТРОКА
+        'settings_api_key_section': "--- API Key Management ---",
+        'settings_btn_set_api_key': "🔑 Set/Update API Key",
+        'settings_model_section': "--- Neural Network Model ---", # <-- НОВАЯ СТРОКА
+        'settings_btn_choose_model': "🧠 Choose Model", # <-- НОВАЯ СТРОКА
         'style_changed_notice': "Communication style changed. The conversation context has been reset.",
+        # --- Model Selection ---
+        'model_selection_title': "🧠 *Gemini Model Selection*", # <-- НОВАЯ СТРОКА
+        'model_selection_loading': "⏳ Loading list of available models...", # <-- НОВАЯ СТРОКА
+        'model_selection_error': "❌ Could not load the model list. Please check your API key or try again later.", # <-- НОВАЯ СТРОКА
+        'model_changed_notice': "✅ Model changed to *{model_name}*. The conversation context has been reset.", # <-- НОВАЯ СТРОКА
+        'btn_back_to_settings': "⬅️ Back to Settings", # <-- НОВАЯ СТРОКА
         # --- Commands and States ---
         'cmd_reset_success': "✅ The conversation context and your current state have been reset.",
         'set_api_key_prompt': "Please send your Google AI API key. The message with the key will be deleted.",

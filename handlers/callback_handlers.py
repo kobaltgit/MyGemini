@@ -4,10 +4,11 @@ from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 
 from config.settings import (
-    BOT_STYLES, TRANSLATE_LANGUAGES,
+    BOT_STYLES, TRANSLATE_LANGUAGES, CALLBACK_SETTINGS_BACK_TO_MAIN,
     CALLBACK_LANG_PREFIX, STATE_WAITING_FOR_TRANSLATE_TEXT,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX, STATE_WAITING_FOR_HISTORY_DATE,
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY,
+    CALLBACK_SETTINGS_CHOOSE_MODEL_MENU, CALLBACK_SETTINGS_MODEL_PREFIX,
     CALLBACK_IGNORE, STATE_WAITING_FOR_API_KEY
 )
 from database import db_manager
@@ -45,13 +46,22 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
             await handle_language_selection_for_translation(bot, call, lang_code)
 
         elif data.startswith(CALLBACK_SETTINGS_STYLE_PREFIX):
-            await handle_style_setting(bot, call)
+            await handle_style_setting(bot, call, lang_code)
 
         elif data.startswith(CALLBACK_SETTINGS_LANG_PREFIX):
             await handle_language_setting(bot, call)
 
         elif data == CALLBACK_SETTINGS_SET_API_KEY:
-            await handle_set_api_key_from_settings(bot, call)
+            await handle_set_api_key_from_settings(bot, call, lang_code)
+
+        elif data == CALLBACK_SETTINGS_CHOOSE_MODEL_MENU:
+            await handle_choose_model_menu(bot, call, lang_code)
+
+        elif data.startswith(CALLBACK_SETTINGS_MODEL_PREFIX):
+            await handle_model_selection(bot, call, lang_code)
+
+        elif data == CALLBACK_SETTINGS_BACK_TO_MAIN:
+            await handle_back_to_main_settings(bot, call, lang_code)
 
         elif data.startswith(CALLBACK_CALENDAR_DATE_PREFIX):
             await handle_calendar_date_selection(bot, call, lang_code)
@@ -68,34 +78,37 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
 
 # --- Обработчики конкретных колбэков ---
 
-async def handle_set_api_key_from_settings(bot: AsyncTeleBot, call: types.CallbackQuery):
-    """Обрабатывает нажатие на кнопку установки API-ключа в настройках."""
+async def handle_back_to_main_settings(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
+    """Возвращает пользователя в главное меню настроек."""
     user_id = call.from_user.id
-    lang_code = db_manager.get_user_language(user_id)
-
-    # Переводим пользователя в состояние ожидания ключа
-    user_states[user_id] = STATE_WAITING_FOR_API_KEY
-
-    # Отправляем уведомление
+    settings_markup = mk.create_settings_keyboard(user_id)
+    await tg_helpers.edit_message_text_safe(
+        bot,
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=loc.get_text('settings_title', lang_code),
+        reply_markup=settings_markup
+    )
     await tg_helpers.answer_callback_query(bot, call)
 
-    # Редактируем сообщение, чтобы убрать клавиатуру и показать инструкцию
+async def handle_set_api_key_from_settings(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
+    """Обрабатывает нажатие на кнопку установки API-ключа в настройках."""
+    user_id = call.from_user.id
+    user_states[user_id] = STATE_WAITING_FOR_API_KEY
+    await tg_helpers.answer_callback_query(bot, call)
     await tg_helpers.edit_message_text_safe(
         bot,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=loc.get_text('set_api_key_prompt', lang_code),
-        reply_markup=None # Убираем инлайн-клавиатуру
+        reply_markup=None
     )
-
 
 async def handle_language_setting(bot: AsyncTeleBot, call: types.CallbackQuery):
     """Обрабатывает смену языка интерфейса."""
     user_id = call.from_user.id
     new_lang_code = call.data[len(CALLBACK_SETTINGS_LANG_PREFIX):]
-
     db_manager.set_user_language(user_id, new_lang_code)
-
     new_markup = mk.create_settings_keyboard(user_id)
     await tg_helpers.edit_message_text_safe(
         bot, call.message.chat.id, call.message.message_id,
@@ -104,19 +117,14 @@ async def handle_language_setting(bot: AsyncTeleBot, call: types.CallbackQuery):
     )
     await tg_helpers.answer_callback_query(bot, call, text=f"Language set to {'English' if new_lang_code == 'en' else 'Русский'}")
 
-
-async def handle_style_setting(bot: AsyncTeleBot, call: types.CallbackQuery):
+async def handle_style_setting(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Обрабатывает выбор стиля общения бота."""
     user_id = call.from_user.id
     style_code = call.data[len(CALLBACK_SETTINGS_STYLE_PREFIX):]
-    lang_code = db_manager.get_user_language(user_id)
-
     if style_code in BOT_STYLES:
         db_manager.set_user_bot_style(user_id, style_code)
         gemini_service.reset_user_chat(user_id)
-
         new_markup = mk.create_settings_keyboard(user_id)
-
         await tg_helpers.edit_message_text_safe(
             bot, call.message.chat.id, call.message.message_id,
             loc.get_text('settings_title', lang_code),
@@ -124,6 +132,64 @@ async def handle_style_setting(bot: AsyncTeleBot, call: types.CallbackQuery):
         )
         await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('style_changed_notice', lang_code))
 
+# --- Новые обработчики для выбора модели ---
+
+async def handle_choose_model_menu(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
+    """Отображает меню выбора модели."""
+    user_id = call.from_user.id
+    api_key = db_manager.get_user_api_key(user_id)
+
+    if not api_key:
+        await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('api_key_needed_for_feature', lang_code), show_alert=True)
+        return
+
+    # Показываем уведомление о загрузке
+    await tg_helpers.edit_message_text_safe(
+        bot, call.message.chat.id, call.message.message_id,
+        text=loc.get_text('model_selection_loading', lang_code),
+        reply_markup=None
+    )
+
+    models = await gemini_service.get_available_models(api_key)
+    if not models:
+        await tg_helpers.edit_message_text_safe(
+            bot, call.message.chat.id, call.message.message_id,
+            text=loc.get_text('model_selection_error', lang_code),
+            reply_markup=mk.create_settings_keyboard(user_id) # Возвращаем на всякий случай
+        )
+        return
+
+    current_model = db_manager.get_user_gemini_model(user_id)
+    keyboard = mk.create_model_selection_keyboard(models, current_model, lang_code)
+
+    await tg_helpers.edit_message_text_safe(
+        bot, call.message.chat.id, call.message.message_id,
+        text=loc.get_text('model_selection_title', lang_code),
+        reply_markup=keyboard
+    )
+
+async def handle_model_selection(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
+    """Обрабатывает выбор конкретной модели."""
+    user_id = call.from_user.id
+    model_name = call.data[len(CALLBACK_SETTINGS_MODEL_PREFIX):]
+
+    db_manager.set_user_gemini_model(user_id, model_name)
+    gemini_service.reset_user_chat(user_id)
+
+    # Возвращаемся в основное меню настроек
+    settings_markup = mk.create_settings_keyboard(user_id)
+    await tg_helpers.edit_message_text_safe(
+        bot, call.message.chat.id, call.message.message_id,
+        text=loc.get_text('settings_title', lang_code),
+        reply_markup=settings_markup
+    )
+
+    await tg_helpers.answer_callback_query(
+        bot, call,
+        text=loc.get_text('model_changed_notice', lang_code).format(model_name=model_name)
+    )
+
+# ---------------------------------------------
 
 async def handle_language_selection_for_translation(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Обрабатывает выбор языка для перевода."""
@@ -141,7 +207,6 @@ async def handle_language_selection_for_translation(bot: AsyncTeleBot, call: typ
         bot, call.message.chat.id, call.message.message_id,
         text, reply_markup=None
     )
-
 
 async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Обрабатывает выбор даты в календаре для истории."""

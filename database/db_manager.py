@@ -1,3 +1,4 @@
+# File: database/db_manager.py
 import sqlite3
 import threading
 import datetime
@@ -22,6 +23,7 @@ def _get_db_connection() -> sqlite3.Connection:
     except sqlite3.Error as e:
         db_logger.exception(f"Ошибка подключения к базе данных {DATABASE_NAME}: {e}")
         raise
+
 
 def _execute_query(query: str, params: tuple = (), fetch_one: bool = False, fetch_all: bool = False,
                    is_write_operation: bool = False) -> Optional[Any]:
@@ -68,7 +70,7 @@ def setup_database():
     """Инициализирует структуру базы данных, если она не существует."""
     required_user_columns = {
         'user_id', 'bot_style', 'first_interaction_date',
-        'api_key', 'language_code'
+        'api_key', 'language_code', 'gemini_model'  # <-- ДОБАВЛЕНО ПОЛЕ
     }
 
     conn = None
@@ -88,7 +90,8 @@ def setup_database():
                 bot_style TEXT DEFAULT 'default' NOT NULL,
                 first_interaction_date TEXT,
                 api_key TEXT DEFAULT NULL,
-                language_code TEXT DEFAULT 'ru' NOT NULL
+                language_code TEXT DEFAULT 'ru' NOT NULL,
+                gemini_model TEXT DEFAULT NULL
             )
             """)
             db_logger.info("Таблица 'users' успешно создана.")
@@ -96,17 +99,16 @@ def setup_database():
             cursor.execute("PRAGMA table_info(users)")
             current_columns = {col['name'] for col in cursor.fetchall()}
             missing_columns = required_user_columns - current_columns
+
             for col in missing_columns:
                 db_logger.info(f"Добавляем отсутствующий столбец '{col}' в таблицу 'users'...")
                 col_type = 'TEXT'
-                default_val_str = ''
+                default_val_str = 'DEFAULT NULL'
                 not_null_str = ''
 
                 if col == 'bot_style':
                     default_val_str = "DEFAULT 'default'"
                     not_null_str = 'NOT NULL'
-                elif col == 'api_key':
-                    default_val_str = "DEFAULT NULL"
                 elif col == 'language_code':
                     default_val_str = "DEFAULT 'ru'"
                     not_null_str = 'NOT NULL'
@@ -187,6 +189,7 @@ def set_user_api_key(user_id: int, api_key: str):
     except Exception as e:
         db_logger.exception(f"Ошибка при шифровании и сохранении API-ключа для {user_id}: {e}", extra={'user_id': str(user_id)})
 
+
 def get_user_api_key(user_id: int) -> Optional[str]:
     query = "SELECT api_key FROM users WHERE user_id = ?"
     result = _execute_query(query, (user_id,), fetch_one=True)
@@ -214,6 +217,20 @@ def get_user_language(user_id: int) -> str:
     query = "SELECT language_code FROM users WHERE user_id = ?"
     result = _execute_query(query, (user_id,), fetch_one=True)
     return result['language_code'] if result and result['language_code'] else 'ru'
+
+# --- НОВЫЕ ФУНКЦИИ ДЛЯ МОДЕЛИ ---
+def set_user_gemini_model(user_id: int, model_name: str):
+    """Устанавливает выбранную модель Gemini для пользователя."""
+    add_or_update_user(user_id)
+    query = "UPDATE users SET gemini_model = ? WHERE user_id = ?"
+    _execute_query(query, (model_name, user_id), is_write_operation=True)
+    db_logger.info(f"Модель Gemini для {user_id} изменена на '{model_name}'.", extra={'user_id': str(user_id)})
+
+def get_user_gemini_model(user_id: int) -> Optional[str]:
+    """Получает модель Gemini, выбранную пользователем."""
+    query = "SELECT gemini_model FROM users WHERE user_id = ?"
+    result = _execute_query(query, (user_id,), fetch_one=True)
+    return result['gemini_model'] if result and result['gemini_model'] else None
 
 # --- Функции для работы с историей сообщений (conversations) ---
 

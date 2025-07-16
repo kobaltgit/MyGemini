@@ -1,3 +1,4 @@
+# File: services/gemini_service.py
 import aiohttp
 import PIL.Image
 from typing import List, Union, Dict, Optional, Any
@@ -14,24 +15,24 @@ gemini_logger = get_logger('gemini_api')
 user_chats: Dict[int, List[Dict[str, Any]]] = {}
 
 # Базовый URL для Gemini API v1beta
-GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
+GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 
-async def _make_gemini_request_async(api_key: str, model_name: str, contents: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+async def _make_gemini_request_async(api_key: str, url: str, payload: Optional[Dict] = None,
+                                     method: str = 'POST') -> Optional[Dict[str, Any]]:
     """
-    Выполняет асинхронный HTTP-запрос к Gemini API.
+    Выполняет универсальный асинхронный HTTP-запрос к Gemini API.
     """
-    url = f"{GEMINI_API_BASE_URL}/{model_name}:generateContent?key={api_key}"
-
-    payload = {
-        "contents": contents,
-        "generationConfig": GENERATION_CONFIG,
-        "safetySettings": SAFETY_SETTINGS
-    }
+    headers = {'Content-Type': 'application/json'}
+    params = {'key': api_key}
 
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
+            request_args = {'params': params, 'headers': headers}
+            if payload:
+                request_args['json'] = payload
+
+            async with session.request(method, url, **request_args) as response:
                 response_json = await response.json()
                 if response.status != 200:
                     error_details = response_json.get('error', {})
@@ -47,6 +48,7 @@ async def _make_gemini_request_async(api_key: str, model_name: str, contents: Li
     except Exception as e:
         gemini_logger.exception(f"Неожиданная ошибка при выполнении запроса к Gemini API: {e}", extra={'user_id': 'System'})
         return None
+
 
 def _get_user_chat_history(user_id: int) -> List[Dict[str, Any]]:
     """
@@ -75,10 +77,15 @@ def reset_user_chat(user_id: int):
         del user_chats[user_id]
         gemini_logger.info(f"История чата в кэше для user_id: {user_id} сброшена.", extra={'user_id': str(user_id)})
 
+
 async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[Union[str, PIL.Image.Image]]], store_in_db: bool = True) -> Optional[str]:
     """
     Генерирует ответ от Gemini, используя прямой HTTP-запрос.
     """
+    # Получаем модель, выбранную пользователем. Если нет, используем дефолтную.
+    model_name = db_manager.get_user_gemini_model(user_id) or GEMINI_MODEL_NAME
+    gemini_logger.info(f"Используется модель '{model_name}' для user_id: {user_id}", extra={'user_id': str(user_id)})
+
     history = _get_user_chat_history(user_id)
 
     # Формируем 'contents' для запроса
@@ -96,11 +103,16 @@ async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[
             if isinstance(item, str):
                 text_part = item
             elif isinstance(item, PIL.Image.Image):
-                # Конвертируем изображение в base64
                 buffered = BytesIO()
+                # Конвертируем в JPEG, так как он широко поддерживается
+                # Если изображение с прозрачностью, конвертируем в RGB
+                if item.mode == 'RGBA':
+                    item = item.convert('RGB')
                 item.save(buffered, format="JPEG")
                 img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
                 user_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_str}})
+
+        # Текстовая часть всегда должна идти последней
         user_parts.append({"text": text_part})
         user_message_for_db = f"[Изображение] {text_part}".strip()
 
@@ -111,12 +123,18 @@ async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[
         db_manager.store_message(user_id, 'user', user_message_for_db)
 
     # Делаем запрос к API
-    response_json = await _make_gemini_request_async(api_key, GEMINI_MODEL_NAME, request_contents)
+    url = f"{GEMINI_API_BASE_URL}/models/{model_name}:generateContent"
+    payload = {
+        "contents": request_contents,
+        "generationConfig": GENERATION_CONFIG,
+        "safetySettings": SAFETY_SETTINGS
+    }
+    response_json = await _make_gemini_request_async(api_key, url, payload, 'POST')
 
     if not response_json or "candidates" not in response_json:
         # Если ответ неудачный, удаляем последнее сообщение пользователя из истории в кэше
-        if history:
-            history.pop()
+        if request_contents:
+            request_contents.pop()
         return None
 
     try:
@@ -138,9 +156,11 @@ async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[
 async def generate_content_simple(api_key: str, prompt: str) -> Optional[str]:
     """
     Генерирует ответ от Gemini без использования истории чата.
+    Использует модель по умолчанию.
     """
-    contents = [{"role": "user", "parts": [{"text": prompt}]}]
-    response_json = await _make_gemini_request_async(api_key, GEMINI_MODEL_NAME, contents)
+    url = f"{GEMINI_API_BASE_URL}/models/{GEMINI_MODEL_NAME}:generateContent"
+    payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+    response_json = await _make_gemini_request_async(api_key, url, payload, 'POST')
 
     if not response_json or "candidates" not in response_json:
         return None
@@ -153,12 +173,39 @@ async def validate_api_key(api_key: str) -> bool:
     """
     Проверяет валидность API-ключа, делая дешевый запрос (countTokens).
     """
-    url = f"{GEMINI_API_BASE_URL}/{GEMINI_MODEL_NAME}:countTokens?key={api_key}"
+    url = f"{GEMINI_API_BASE_URL}/models/{GEMINI_MODEL_NAME}:countTokens"
     payload = {"contents": [{"parts": [{"text": "hello"}]}]}
+    response = await _make_gemini_request_async(api_key, url, payload, 'POST')
+    return response is not None and "totalTokens" in response
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
-                return response.status == 200
-    except Exception:
-        return False
+
+async def get_available_models(api_key: str) -> List[Dict[str, str]]:
+    """
+    Получает список доступных моделей Gemini с API, фильтруя только подходящие.
+    """
+    url = f"{GEMINI_API_BASE_URL}/models"
+    response_json = await _make_gemini_request_async(api_key, url, method='GET')
+
+    if not response_json or 'models' not in response_json:
+        return []
+
+    available_models = []
+    # Фильтруем модели: оставляем только те, что подходят для генерации контента
+    # и не являются "embedding" или "aqa" моделями.
+    for model in response_json['models']:
+        model_name = model.get('name', '').replace('models/', '')
+        if 'generateContent' in model.get('supportedGenerationMethods', []) and \
+           'embedding' not in model_name and 'aqa' not in model_name and 'text-embedding' not in model_name:
+            available_models.append({
+                "name": model_name,
+                "display_name": model.get('displayName', model_name)
+            })
+
+    # Сортируем модели для удобства: сначала flash, потом pro
+    available_models.sort(key=lambda x: (
+        'flash' not in x['name'],
+        'pro' not in x['name'],
+        x['name']
+    ))
+
+    return available_models
