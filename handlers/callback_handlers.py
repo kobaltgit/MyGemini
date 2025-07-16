@@ -16,7 +16,7 @@ from services import gemini_service
 from services.gemini_service import GeminiAPIError # Импортируем кастомное исключение
 from utils import markup_helpers as mk
 from utils import localization as loc
-from .states import user_states
+# УДАЛЕНО: from .states import user_states
 from . import telegram_helpers as tg_helpers
 
 from logger_config import get_logger
@@ -90,8 +90,8 @@ async def handle_back_to_main_settings(bot: AsyncTeleBot, call: types.CallbackQu
 
 async def handle_set_api_key_from_settings(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Обрабатывает нажатие на кнопку установки API-ключа в настройках."""
-    user_id = call.from_user.id
-    user_states[user_id] = STATE_WAITING_FOR_API_KEY
+    # ИЗМЕНЕНО: Устанавливаем состояние через бота
+    await bot.set_state(call.from_user.id, STATE_WAITING_FOR_API_KEY, call.message.chat.id)
     await tg_helpers.answer_callback_query(bot, call)
     await tg_helpers.edit_message_text_safe(
         bot,
@@ -189,8 +189,9 @@ async def handle_language_selection_for_translation(bot: AsyncTeleBot, call: typ
     target_lang_code = call.data[len(CALLBACK_LANG_PREFIX):]
     lang_name = TRANSLATE_LANGUAGES.get(target_lang_code, target_lang_code)
 
-    user_states[user_id] = STATE_WAITING_FOR_TRANSLATE_TEXT
-    user_states[f"{user_id}_target_lang"] = target_lang_code
+    # ИЗМЕНЕНО: Устанавливаем состояние и сохраняем данные через бота
+    await bot.set_state(user_id, STATE_WAITING_FOR_TRANSLATE_TEXT, call.message.chat.id)
+    await bot.add_data(user_id, call.message.chat.id, target_lang=target_lang_code)
 
     await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('language_selected_notice', lang_code).format(lang_name=lang_name))
 
@@ -205,7 +206,10 @@ async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.Callback
     user_id = call.from_user.id
     selected_date_str = call.data[len(CALLBACK_CALENDAR_DATE_PREFIX):]
 
-    if user_states.get(user_id) == STATE_WAITING_FOR_HISTORY_DATE:
+    # ИЗМЕНЕНО: Получаем текущее состояние через бота
+    current_state = await bot.get_state(user_id, call.message.chat.id)
+
+    if current_state == STATE_WAITING_FOR_HISTORY_DATE:
         await tg_helpers.answer_callback_query(bot, call)
         await tg_helpers.edit_message_text_safe(
             bot, call.message.chat.id, call.message.message_id,
@@ -228,12 +232,14 @@ async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.Callback
             else:
                 await bot.send_message(user_id, loc.get_text('history_no_messages', lang_code))
 
-            user_states.pop(user_id, None)
+            # ИЗМЕНЕНО: Сбрасываем состояние через бота
+            await bot.delete_state(user_id, call.message.chat.id)
 
         except (ValueError, TypeError) as e:
             logger.error(f"Ошибка при обработке даты истории '{selected_date_str}' для user_id {user_id}: {e}", extra={'user_id': str(user_id)})
             await bot.send_message(user_id, loc.get_text('history_date_error', lang_code))
-            user_states.pop(user_id, None)
+            # ИЗМЕНЕНО: Сбрасываем состояние через бота
+            await bot.delete_state(user_id, call.message.chat.id)
 
 
 async def handle_calendar_month_navigation(bot: AsyncTeleBot, call: types.CallbackQuery):

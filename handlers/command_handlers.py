@@ -2,7 +2,7 @@
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 
-from .states import user_states  # Импортируем состояния
+# УДАЛЕНО: from .states import user_states
 from . import telegram_helpers as tg_helpers # Импортируем хелперы
 from utils import markup_helpers as mk
 from utils import localization as loc
@@ -28,8 +28,8 @@ async def handle_start(message: types.Message, bot: AsyncTeleBot):
     db_manager.add_or_update_user(user_id)
     lang_code = db_manager.get_user_language(user_id)
 
-    if user_id in user_states:
-        user_states.pop(user_id, None)
+    # ИЗМЕНЕНО: Сбрасываем состояние пользователя через бота
+    await bot.delete_state(message.from_user.id, message.chat.id)
     gemini_service.reset_user_chat(user_id)
 
     welcome_text = loc.get_text('welcome', lang_code).format(name=first_name)
@@ -55,8 +55,8 @@ async def handle_reset(message: types.Message, bot: AsyncTeleBot):
     user_id = message.chat.id
     lang_code = db_manager.get_user_language(user_id)
 
-    if user_id in user_states:
-        user_states.pop(user_id, None)
+    # ИЗМЕНЕНО: Сбрасываем состояние пользователя через бота
+    await bot.delete_state(message.from_user.id, message.chat.id)
     gemini_service.reset_user_chat(user_id)
 
     reset_text = loc.get_text('cmd_reset_success', lang_code)
@@ -69,7 +69,8 @@ async def handle_set_api_key(message: types.Message, bot: AsyncTeleBot):
     lang_code = db_manager.get_user_language(user_id)
 
     text = loc.get_text('set_api_key_prompt', lang_code)
-    user_states[user_id] = STATE_WAITING_FOR_API_KEY
+    # ИЗМЕНЕНО: Устанавливаем состояние ожидания API ключа через бота
+    await bot.set_state(message.from_user.id, STATE_WAITING_FOR_API_KEY, message.chat.id)
     await bot.reply_to(message, text, reply_markup=types.ReplyKeyboardRemove())
 
 
@@ -81,7 +82,8 @@ async def handle_history(message: types.Message, bot: AsyncTeleBot):
     calendar_markup = mk.create_calendar_keyboard()
     text = loc.get_text('history_prompt', lang_code)
     await bot.send_message(user_id, text, reply_markup=calendar_markup)
-    user_states[user_id] = STATE_WAITING_FOR_HISTORY_DATE
+    # ИЗМЕНЕНО: Устанавливаем состояние ожидания даты через бота
+    await bot.set_state(message.from_user.id, STATE_WAITING_FOR_HISTORY_DATE, message.chat.id)
 
 
 async def handle_settings(message: types.Message, bot: AsyncTeleBot):

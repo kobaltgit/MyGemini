@@ -5,7 +5,7 @@ from typing import Optional, List, Union
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 
-from .states import user_states
+# УДАЛЕНО: from .states import user_states
 from . import telegram_helpers as tg_helpers
 from utils import markup_helpers as mk
 from utils import localization as loc
@@ -34,7 +34,9 @@ async def handle_any_message(message: types.Message, bot: AsyncTeleBot):
 
     user_logger.info(f"Получено сообщение ({content_type}) от user ID: {user_id}", extra={'user_id': str(user_id)})
     db_manager.add_or_update_user(user_id)
-    current_state = user_states.get(user_id)
+
+    # ИЗМЕНЕНО: Получаем состояние через бота
+    current_state = await bot.get_state(message.from_user.id, message.chat.id)
 
     try:
         if current_state:
@@ -52,8 +54,8 @@ async def handle_any_message(message: types.Message, bot: AsyncTeleBot):
         await tg_helpers.send_long_message(bot, user_id, user_friendly_error)
     except Exception as e:
         await tg_helpers.send_error_reply(bot, message, f"Критическая ошибка в handle_any_message для user_id {user_id}: {e}")
-        if user_id in user_states:
-            user_states.pop(user_id, None)
+        # ИЗМЕНЕНО: Сбрасываем состояние через бота в случае критической ошибки
+        await bot.delete_state(message.from_user.id, message.chat.id)
 
 
 async def handle_stateful_message(bot: AsyncTeleBot, message: types.Message, current_state: str):
@@ -73,7 +75,8 @@ async def handle_stateful_message(bot: AsyncTeleBot, message: types.Message, cur
         await handler(bot, message)
     else:
         logger.warning(f"Нет обработчика для состояния '{current_state}' у пользователя {message.chat.id}", extra={'user_id': str(message.chat.id)})
-        user_states.pop(message.chat.id, None)
+        # ИЗМЕНЕНО: Сбрасываем неизвестное состояние через бота
+        await bot.delete_state(message.from_user.id, message.chat.id)
 
 
 # --- Обработчики состояний ---
@@ -99,7 +102,8 @@ async def handle_state_api_key(bot: AsyncTeleBot, message: types.Message):
 
     if is_valid:
         db_manager.set_user_api_key(user_id, api_key)
-        user_states.pop(user_id, None)
+        # ИЗМЕНЕНО: Сбрасываем состояние через бота
+        await bot.delete_state(message.from_user.id, message.chat.id)
         text = loc.get_text('api_key_success', lang_code)
         await bot.send_message(user_id, text, reply_markup=mk.create_main_keyboard(lang_code))
     else:
@@ -111,18 +115,24 @@ async def handle_state_translate(bot: AsyncTeleBot, message: types.Message):
     """Обрабатывает текст для перевода."""
     user_id = message.chat.id
     text_to_translate = message.text
-    target_lang_code = user_states.get(f"{user_id}_target_lang")
+    target_lang_code = None
     lang_code = db_manager.get_user_language(user_id)
     api_key = db_manager.get_user_api_key(user_id)
 
+    # ИЗМЕНЕНО: Получаем данные (язык перевода) из хранилища бота
+    async with bot.retrieve_data(user_id, message.chat.id) as data:
+        target_lang_code = data.get('target_lang')
+
     if not api_key:
         await bot.reply_to(message, loc.get_text('api_key_needed_for_feature', lang_code))
-        user_states.pop(user_id, None)
+        # ИЗМЕНЕНО: Сбрасываем состояние через бота
+        await bot.delete_state(user_id, message.chat.id)
         return
     if not target_lang_code:
         logger.error(f"Отсутствует target_lang_code для перевода у user {user_id}", extra={'user_id': str(user_id)})
         await bot.reply_to(message, loc.get_text('translation_error_generic', lang_code))
-        user_states.pop(user_id, None)
+        # ИЗМЕНЕНО: Сбрасываем состояние через бота
+        await bot.delete_state(user_id, message.chat.id)
         return
 
     await tg_helpers.send_typing_action(bot, user_id)
@@ -131,8 +141,8 @@ async def handle_state_translate(bot: AsyncTeleBot, message: types.Message):
     if translated_text:
         await bot.reply_to(message, translated_text)
 
-    user_states.pop(user_id, None)
-    user_states.pop(f"{user_id}_target_lang", None)
+    # ИЗМЕНЕНО: Сбрасываем состояние и все связанные данные через бота
+    await bot.delete_state(user_id, message.chat.id)
 
 
 # --- Основные обработчики ---
