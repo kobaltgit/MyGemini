@@ -1,3 +1,4 @@
+# File: config/settings.py
 import os
 from dotenv import load_dotenv
 
@@ -55,6 +56,7 @@ CALLBACK_REPORT_ERROR = 'report_error'
 # Settings
 CALLBACK_SETTINGS_STYLE_PREFIX = 'settings_style:'
 CALLBACK_SETTINGS_LANG_PREFIX = 'settings_lang:'
+CALLBACK_SETTINGS_SET_API_KEY = 'settings_set_api_key'  # <-- НОВЫЙ ПРЕФИКС
 # Language (for translation)
 CALLBACK_LANG_PREFIX = 'lang:'
 # Calendar (for history)

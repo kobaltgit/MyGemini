@@ -123,7 +123,8 @@ def register_command_handlers(bot: AsyncTeleBot):
     bot.register_message_handler(handle_start, commands=['start'], pass_bot=True)
     bot.register_message_handler(handle_help, commands=['help'], pass_bot=True)
     bot.register_message_handler(handle_reset, commands=['reset'], pass_bot=True)
-    bot.register_message_handler(handle_set_api_key, commands=['set_api_key'], pass_bot=True)
+    # Добавляем alias /setapikey
+    bot.register_message_handler(handle_set_api_key, commands=['set_api_key', 'setapikey'], pass_bot=True)
     bot.register_message_handler(handle_settings, commands=['settings'], pass_bot=True)
     bot.register_message_handler(handle_history, commands=['history'], pass_bot=True)
     bot.register_message_handler(handle_translate, commands=['translate'], pass_bot=True)

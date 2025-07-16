@@ -1,3 +1,4 @@
+# File: utils/markup_helpers.py
 from telebot import types
 import datetime
 from typing import List, Optional, Dict, Any
@@ -7,11 +8,11 @@ from config.settings import (
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_IGNORE,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX,
     CALLBACK_REPORT_ERROR, CALLBACK_LANG_PREFIX,
-    CALLBACK_SETTINGS_LANG_PREFIX
+    CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY
 )
 from database import db_manager
 from logger_config import get_logger
-# Импортируем наш новый модуль локализации
+# Импортируем наш модуль локализации
 from . import localization as loc
 
 logger = get_logger('markup_helpers')
@@ -31,6 +32,7 @@ def create_main_keyboard(lang_code: str) -> types.ReplyKeyboardMarkup:
     markup.add(*buttons)
     return markup
 
+
 def create_language_selection_keyboard() -> types.InlineKeyboardMarkup:
     """Создает inline-клавиатуру для выбора языка для ПЕРЕВОДА."""
     markup = types.InlineKeyboardMarkup(row_width=3)
@@ -44,13 +46,22 @@ def create_language_selection_keyboard() -> types.InlineKeyboardMarkup:
         markup.add(*buttons[i:i+3])
     return markup
 
+
 def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
-    """Создает inline-клавиатуру настроек, включая стиль и язык ИНТЕРФЕЙСА."""
+    """Создает inline-клавиатуру настроек, включая стиль, язык и API ключ."""
     markup = types.InlineKeyboardMarkup(row_width=1)
 
     # Получаем текущие настройки пользователя
     current_style = db_manager.get_user_bot_style(user_id)
     current_lang = db_manager.get_user_language(user_id)
+
+    # --- Секция API ключа ---
+    markup.add(types.InlineKeyboardButton(loc.get_text('settings_api_key_section', current_lang), callback_data=CALLBACK_IGNORE))
+    api_key_button = types.InlineKeyboardButton(
+        loc.get_text('settings_btn_set_api_key', current_lang),
+        callback_data=CALLBACK_SETTINGS_SET_API_KEY
+    )
+    markup.add(api_key_button)
 
     # --- Секция стиля общения ---
     markup.add(types.InlineKeyboardButton(loc.get_text('settings_style_section', current_lang), callback_data=CALLBACK_IGNORE))
@@ -59,8 +70,10 @@ def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
         button_text = f"✅ {style_name}" if style_code == current_style else style_name
         style_buttons.append(types.InlineKeyboardButton(button_text, callback_data=f'{CALLBACK_SETTINGS_STYLE_PREFIX}{style_code}'))
 
-    for i in range(0, len(style_buttons), 2):
-        markup.add(*style_buttons[i:i+(2 if i+1 < len(style_buttons) else 1)])
+    # Размещаем кнопки стилей по две в ряд для компактности
+    style_rows = [style_buttons[i:i + 2] for i in range(0, len(style_buttons), 2)]
+    for row in style_rows:
+        markup.add(*row)
 
     # --- Секция языка интерфейса ---
     markup.add(types.InlineKeyboardButton(loc.get_text('settings_language_section', current_lang), callback_data=CALLBACK_IGNORE))
@@ -72,6 +85,7 @@ def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
 
     return markup
 
+
 def create_calendar_keyboard(year: Optional[int] = None, month: Optional[int] = None) -> types.InlineKeyboardMarkup:
     """Создает inline-клавиатуру с календарем для выбора даты истории."""
     now = datetime.datetime.now()
@@ -80,6 +94,7 @@ def create_calendar_keyboard(year: Optional[int] = None, month: Optional[int] = 
     markup = types.InlineKeyboardMarkup(row_width=7)
 
     try:
+        # Форматируем название месяца на английском, так как locale может быть не настроен
         month_name = datetime.date(year, month, 1).strftime("%B %Y")
     except ValueError:
         year, month = now.year, now.month
@@ -91,7 +106,11 @@ def create_calendar_keyboard(year: Optional[int] = None, month: Optional[int] = 
 
     try:
         first_day_of_month = datetime.date(year, month, 1)
-        last_day_of_month_day = (datetime.date(year, month + 1, 1) - datetime.timedelta(days=1)).day if month < 12 else 31
+        # Корректное определение последнего дня месяца
+        if month == 12:
+            last_day_of_month_day = 31
+        else:
+            last_day_of_month_day = (datetime.date(year, month + 1, 1) - datetime.timedelta(days=1)).day
 
         row_buttons = [types.InlineKeyboardButton(" ", callback_data=CALLBACK_IGNORE)] * first_day_of_month.weekday()
 
@@ -99,6 +118,7 @@ def create_calendar_keyboard(year: Optional[int] = None, month: Optional[int] = 
             current_date = datetime.date(year, month, day_num)
             callback_value = f"{CALLBACK_CALENDAR_DATE_PREFIX}{current_date.strftime('%Y-%m-%d')}"
             row_buttons.append(types.InlineKeyboardButton(str(day_num), callback_data=callback_value))
+
             if len(row_buttons) == 7:
                 markup.row(*row_buttons)
                 row_buttons = []
@@ -112,7 +132,12 @@ def create_calendar_keyboard(year: Optional[int] = None, month: Optional[int] = 
 
     # --- Навигация ---
     prev_month_date = first_day_of_month - datetime.timedelta(days=1)
-    next_month_date = first_day_of_month + datetime.timedelta(days=32)
+    # Корректный переход на следующий месяц
+    if month == 12:
+        next_month_date = datetime.date(year + 1, 1, 1)
+    else:
+        next_month_date = datetime.date(year, month + 1, 1)
+
     nav_buttons = [
         types.InlineKeyboardButton("⬅️", callback_data=f"{CALLBACK_CALENDAR_MONTH_PREFIX}{prev_month_date.year}-{prev_month_date.month}"),
         types.InlineKeyboardButton(" ", callback_data=CALLBACK_IGNORE),
@@ -120,6 +145,7 @@ def create_calendar_keyboard(year: Optional[int] = None, month: Optional[int] = 
     ]
     markup.row(*nav_buttons)
     return markup
+
 
 def create_error_report_button() -> types.InlineKeyboardMarkup:
     """Создает inline-клавиатуру с кнопкой 'Сообщить об ошибке'."""

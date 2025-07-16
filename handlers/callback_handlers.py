@@ -7,8 +7,8 @@ from config.settings import (
     BOT_STYLES, TRANSLATE_LANGUAGES,
     CALLBACK_LANG_PREFIX, STATE_WAITING_FOR_TRANSLATE_TEXT,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX, STATE_WAITING_FOR_HISTORY_DATE,
-    CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_SETTINGS_LANG_PREFIX,
-    CALLBACK_IGNORE
+    CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY,
+    CALLBACK_IGNORE, STATE_WAITING_FOR_API_KEY
 )
 from database import db_manager
 from services import gemini_service
@@ -50,6 +50,9 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
         elif data.startswith(CALLBACK_SETTINGS_LANG_PREFIX):
             await handle_language_setting(bot, call)
 
+        elif data == CALLBACK_SETTINGS_SET_API_KEY:
+            await handle_set_api_key_from_settings(bot, call)
+
         elif data.startswith(CALLBACK_CALENDAR_DATE_PREFIX):
             await handle_calendar_date_selection(bot, call, lang_code)
 
@@ -64,6 +67,28 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
         await tg_helpers.answer_callback_query(bot, call, text="An internal error occurred.", show_alert=True)
 
 # --- Обработчики конкретных колбэков ---
+
+async def handle_set_api_key_from_settings(bot: AsyncTeleBot, call: types.CallbackQuery):
+    """Обрабатывает нажатие на кнопку установки API-ключа в настройках."""
+    user_id = call.from_user.id
+    lang_code = db_manager.get_user_language(user_id)
+
+    # Переводим пользователя в состояние ожидания ключа
+    user_states[user_id] = STATE_WAITING_FOR_API_KEY
+
+    # Отправляем уведомление
+    await tg_helpers.answer_callback_query(bot, call)
+
+    # Редактируем сообщение, чтобы убрать клавиатуру и показать инструкцию
+    await tg_helpers.edit_message_text_safe(
+        bot,
+        chat_id=call.message.chat.id,
+        message_id=call.message.message_id,
+        text=loc.get_text('set_api_key_prompt', lang_code),
+        reply_markup=None, # Убираем инлайн-клавиатуру
+        parse_mode='Markdown'
+    )
+
 
 async def handle_language_setting(bot: AsyncTeleBot, call: types.CallbackQuery):
     """Обрабатывает смену языка интерфейса."""

@@ -17,8 +17,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'cmd_help_text': "🆘 *Справка по боту*\n\n"
                          "*/start* - Перезапустить бота и сбросить контекст.\n"
                          "*/reset* - Сбросить контекст текущего диалога, не меняя настроек.\n"
-                         "*/set_api_key* - Установить или обновить ваш API ключ от Google AI.\n"
-                         "*/settings* - Открыть меню настроек (стиль общения, язык).\n"
+                         "*/set_api_key* (или */setapikey*) - Установить или обновить ваш API ключ от Google AI.\n"
+                         "*/settings* - Открыть меню настроек (стиль общения, язык, API ключ).\n"
                          "*/history* - Посмотреть историю сообщений за определенную дату.\n"
                          "*/translate* - Перевести текст на другой язык.\n\n"
                          "Вы также можете использовать кнопки внизу для быстрого доступа к этим функциям.",
@@ -26,6 +26,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_title': "⚙️ *Настройки бота*",
         'settings_style_section': "--- Стиль общения бота ---",
         'settings_language_section': "--- Язык интерфейса ---",
+        'settings_api_key_section': "--- Управление API ключом ---", # <-- НОВАЯ СТРОКА
+        'settings_btn_set_api_key': "🔑 Установить/обновить API ключ", # <-- НОВАЯ СТРОКА
         'style_changed_notice': "Стиль общения изменен. Контекст диалога сброшен.",
         # --- Команды и Состояния ---
         'cmd_reset_success': "✅ Контекст разговора и ваше текущее состояние сброшены.",
@@ -75,8 +77,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'cmd_help_text': "🆘 *Bot Help*\n\n"
                          "*/start* - Restart the bot and clear the context.\n"
                          "*/reset* - Clear the context of the current conversation without changing settings.\n"
-                         "*/set_api_key* - Set or update your Google AI API key.\n"
-                         "*/settings* - Open the settings menu (communication style, language).\n"
+                         "*/set_api_key* (or */setapikey*) - Set or update your Google AI API key.\n"
+                         "*/settings* - Open the settings menu (communication style, language, API key).\n"
                          "*/history* - View message history for a specific date.\n"
                          "*/translate* - Translate text to another language.\n\n"
                          "You can also use the buttons below for quick access to these functions.",
@@ -84,6 +86,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_title': "⚙️ *Bot Settings*",
         'settings_style_section': "--- Bot Communication Style ---",
         'settings_language_section': "--- Interface Language ---",
+        'settings_api_key_section': "--- API Key Management ---", # <-- НОВАЯ СТРОКА
+        'settings_btn_set_api_key': "🔑 Set/Update API Key", # <-- НОВАЯ СТРОКА
         'style_changed_notice': "Communication style changed. The conversation context has been reset.",
         # --- Commands and States ---
         'cmd_reset_success': "✅ The conversation context and your current state have been reset.",
