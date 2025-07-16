@@ -35,6 +35,21 @@ SAFETY_SETTINGS = [
     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
 ]
 
+# НОВОЕ: --- Token Cost-Tracking Settings ---
+# Цены указаны в USD за 1 миллион токенов.
+# Источник: https://ai.google.dev/pricing
+# Модель Flash: $0.35 за 1M входных, $1.05 за 1M выходных.
+TOKEN_PRICING = {
+    "default": { # Используется для gemini-1.5-flash-latest
+        "input_usd_per_million": 0.35,
+        "output_usd_per_million": 1.05
+    },
+    "gemini-1.5-pro-latest": {
+        "input_usd_per_million": 3.50,
+        "output_usd_per_million": 10.50
+    }
+}
+
 # --- Bot Styles ---
 BOT_STYLES = {
     'default': '🤖 По умолчанию / Default',

@@ -20,8 +20,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
                          "*/set_api_key* (или */setapikey*) - Установить или обновить ваш API ключ от Google AI.\n"
                          "*/settings* - Открыть меню настроек (стиль общения, язык, API ключ).\n"
                          "*/history* - Посмотреть историю сообщений за определенную дату.\n"
-                         "*/translate* - Перевести текст на другой язык.\n\n"
-                         "Вы также можете использовать кнопки внизу для быстрого доступа к этим функциям.",
+                         "*/translate* - Перевести текст на другой язык.\n"
+                         "*/usage* - Посмотреть статистику использования токенов за сегодня и за месяц.", # <-- НОВЫЙ ПУНКТ
         # --- Настройки ---
         'settings_title': "⚙️ *Настройки бота*",
         'settings_style_section': "--- Стиль общения бота ---",
@@ -58,6 +58,16 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'history_role_bot': "Бот",
         'history_no_messages': "В этот день сообщений не найдено.",
         'history_date_error': "Произошла ошибка при обработке даты. Попробуйте еще раз.",
+        # --- НОВОЕ: Статистика расходов ---
+        'usage_title': "📊 *Статистика расходов токенов*",
+        'usage_today_header': "*За сегодня:*",
+        'usage_month_header': "*За текущий месяц:*",
+        'usage_prompt_tokens': "📥 Входящие (prompt)",
+        'usage_completion_tokens': "📤 Исходящие (completion)",
+        'usage_total_tokens': "∑ Всего",
+        'usage_estimated_cost': "💰 Примерная стоимость",
+        'usage_no_data': "Нет данных для отображения.",
+        'usage_cost_notice': "\n_Стоимость является приблизительной и рассчитывается на основе текущей модели и публичных тарифов Google._",
         # --- Ошибки ---
         'unsupported_content': "Я пока не умею обрабатывать такой тип контента.",
         'state_wrong_content_type': "Пожалуйста, отправьте текст для завершения текущего действия или нажмите /reset.",
@@ -77,6 +87,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'btn_settings': "⚙️ Настройки",
         'btn_help': "❓ Помощь",
         'btn_reset': "🔄 Сброс",
+        'btn_usage': "📊 Расходы", # <-- НОВАЯ КНОПКА
     },
     'en': {
         # --- Welcome and Help ---
@@ -95,8 +106,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
                          "*/set_api_key* (or */setapikey*) - Set or update your Google AI API key.\n"
                          "*/settings* - Open the settings menu (communication style, language, API key).\n"
                          "*/history* - View message history for a specific date.\n"
-                         "*/translate* - Translate text to another language.\n\n"
-                         "You can also use the buttons below for quick access to these functions.",
+                         "*/translate* - Translate text to another language.\n"
+                         "*/usage* - View token usage statistics for today and this month.", # <-- NEW ITEM
         # --- Settings ---
         'settings_title': "⚙️ *Bot Settings*",
         'settings_style_section': "--- Bot Communication Style ---",
@@ -133,6 +144,16 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'history_role_bot': "Bot",
         'history_no_messages': "No messages found on this day.",
         'history_date_error': "An error occurred while processing the date. Please try again.",
+        # --- NEW: Usage Statistics ---
+        'usage_title': "📊 *Token Usage Statistics*",
+        'usage_today_header': "*For Today:*",
+        'usage_month_header': "*For Current Month:*",
+        'usage_prompt_tokens': "📥 Input (prompt)",
+        'usage_completion_tokens': "📤 Output (completion)",
+        'usage_total_tokens': "∑ Total",
+        'usage_estimated_cost': "💰 Estimated Cost",
+        'usage_no_data': "No data to display.",
+        'usage_cost_notice': "\n_The cost is an estimate based on the current model and public Google tariffs._",
         # --- Errors ---
         'unsupported_content': "I don't know how to handle this type of content yet.",
         'state_wrong_content_type': "Please send text to complete the current action, or press /reset.",
@@ -152,6 +173,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'btn_settings': "⚙️ Settings",
         'btn_help': "❓ Help",
         'btn_reset': "🔄 Reset",
+        'btn_usage': "📊 Usage", # <-- NEW BUTTON
     }
 }
 

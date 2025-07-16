@@ -26,7 +26,6 @@ class GeminiAPIError(Exception):
         self.details = details or {}
         self.error_key = get_user_friendly_error_key(self.details)
 
-
 async def _make_gemini_request_async(api_key: str, url: str, payload: Optional[Dict] = None,
                                      method: str = 'POST') -> Dict[str, Any]:
     """
@@ -114,6 +113,8 @@ async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[
         user_parts.append({"text": text_part})
         user_message_for_db = f"[Изображение] {text_part}".strip()
     request_contents.append({"role": "user", "parts": user_parts})
+
+    # ИЗМЕНЕНО: Сообщение пользователя сохраняется без токенов, так как токены относятся ко всему обмену
     if store_in_db and user_message_for_db:
         db_manager.store_message(user_id, 'user', user_message_for_db)
 
@@ -132,8 +133,28 @@ async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[
         response_text = response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
         history.append({"role": "user", "parts": user_parts})
         history.append({"role": "model", "parts": [{"text": response_text}]})
+
+        # НОВОЕ: Извлекаем информацию о токенах
+        usage_metadata = response_json.get('usageMetadata', {})
+        prompt_tokens = usage_metadata.get('promptTokenCount', 0)
+        completion_tokens = usage_metadata.get('candidatesTokenCount', 0)
+        total_tokens = usage_metadata.get('totalTokenCount', 0)
+        gemini_logger.info(
+            f"Использование токенов для user_id: {user_id} - "
+            f"Prompt: {prompt_tokens}, Completion: {completion_tokens}, Total: {total_tokens}",
+            extra={'user_id': str(user_id)}
+        )
+
         if store_in_db:
-            db_manager.store_message(user_id, 'bot', response_text)
+            # ИЗМЕНЕНО: Сохраняем сообщение бота вместе с информацией о токенах
+            db_manager.store_message(
+                user_id=user_id,
+                role='bot',
+                message_text=response_text,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens
+            )
         return response_text
     except (KeyError, IndexError) as e:
         gemini_logger.error(f"Ошибка парсинга ответа от Gemini: {e}", extra={'user_id': str(user_id)})
@@ -150,10 +171,11 @@ async def generate_content_simple(api_key: str, prompt: str) -> str:
     payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
     response_json = await _make_gemini_request_async(api_key, url, payload, 'POST')
     try:
+        # Примечание: простой запрос тоже возвращает токены, но мы их здесь не отслеживаем,
+        # так как это используется для внутренних нужд (анализ тем, перевод), а не для основного чата.
         return response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
     except (KeyError, IndexError) as e:
         raise GeminiAPIError(f"Ошибка чтения ответа от API: {e}", details={"error": {"message": "parsing_error"}})
-
 
 async def validate_api_key(api_key: str) -> bool:
     """Проверяет валидность API-ключа."""

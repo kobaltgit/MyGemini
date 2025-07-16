@@ -2,14 +2,15 @@
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 
-# УДАЛЕНО: from .states import user_states
 from . import telegram_helpers as tg_helpers # Импортируем хелперы
 from utils import markup_helpers as mk
 from utils import localization as loc
 
 from config.settings import (
     STATE_WAITING_FOR_HISTORY_DATE,
-    STATE_WAITING_FOR_API_KEY
+    STATE_WAITING_FOR_API_KEY,
+    TOKEN_PRICING, # <-- НОВОЕ: импортируем цены
+    GEMINI_MODEL_NAME
 )
 from database import db_manager
 from services import gemini_service
@@ -28,7 +29,6 @@ async def handle_start(message: types.Message, bot: AsyncTeleBot):
     db_manager.add_or_update_user(user_id)
     lang_code = db_manager.get_user_language(user_id)
 
-    # ИЗМЕНЕНО: Сбрасываем состояние пользователя через бота
     await bot.delete_state(message.from_user.id, message.chat.id)
     gemini_service.reset_user_chat(user_id)
 
@@ -55,7 +55,6 @@ async def handle_reset(message: types.Message, bot: AsyncTeleBot):
     user_id = message.chat.id
     lang_code = db_manager.get_user_language(user_id)
 
-    # ИЗМЕНЕНО: Сбрасываем состояние пользователя через бота
     await bot.delete_state(message.from_user.id, message.chat.id)
     gemini_service.reset_user_chat(user_id)
 
@@ -69,7 +68,6 @@ async def handle_set_api_key(message: types.Message, bot: AsyncTeleBot):
     lang_code = db_manager.get_user_language(user_id)
 
     text = loc.get_text('set_api_key_prompt', lang_code)
-    # ИЗМЕНЕНО: Устанавливаем состояние ожидания API ключа через бота
     await bot.set_state(message.from_user.id, STATE_WAITING_FOR_API_KEY, message.chat.id)
     await bot.reply_to(message, text, reply_markup=types.ReplyKeyboardRemove())
 
@@ -82,7 +80,6 @@ async def handle_history(message: types.Message, bot: AsyncTeleBot):
     calendar_markup = mk.create_calendar_keyboard()
     text = loc.get_text('history_prompt', lang_code)
     await bot.send_message(user_id, text, reply_markup=calendar_markup)
-    # ИЗМЕНЕНО: Устанавливаем состояние ожидания даты через бота
     await bot.set_state(message.from_user.id, STATE_WAITING_FOR_HISTORY_DATE, message.chat.id)
 
 
@@ -118,6 +115,64 @@ async def handle_personal_account_button(message: types.Message, bot: AsyncTeleB
         reply_markup=mk.create_main_keyboard(lang_code)
     )
 
+# НОВАЯ ФУНКЦИЯ: обработчик команды /usage
+async def handle_usage(message: types.Message, bot: AsyncTeleBot):
+    """Обработчик команды /usage для отображения статистики расходов."""
+    user_id = message.chat.id
+    lang_code = db_manager.get_user_language(user_id)
+
+    # Проверяем, установлен ли API-ключ
+    if not db_manager.get_user_api_key(user_id):
+        await bot.reply_to(message, loc.get_text('api_key_needed_for_feature', lang_code))
+        return
+
+    # Получаем данные за сегодня и за месяц
+    usage_today = db_manager.get_token_usage_by_period(user_id, 'today')
+    usage_month = db_manager.get_token_usage_by_period(user_id, 'month')
+
+    # Получаем текущую модель пользователя для расчета стоимости
+    user_model = db_manager.get_user_gemini_model(user_id) or GEMINI_MODEL_NAME
+    pricing = TOKEN_PRICING.get(user_model, TOKEN_PRICING['default'])
+
+    def calculate_cost(usage_data):
+        input_cost = (usage_data['prompt_tokens'] / 1_000_000) * pricing['input_usd_per_million']
+        output_cost = (usage_data['completion_tokens'] / 1_000_000) * pricing['output_usd_per_million']
+        return input_cost + output_cost
+
+    cost_today = calculate_cost(usage_today)
+    cost_month = calculate_cost(usage_month)
+
+    # Формируем текст ответа
+    report_text = f"{loc.get_text('usage_title', lang_code)}\n\n"
+
+    # Блок "За сегодня"
+    report_text += f"{loc.get_text('usage_today_header', lang_code)}\n"
+    if usage_today['total_tokens'] > 0:
+        report_text += (
+            f"`{loc.get_text('usage_prompt_tokens', lang_code):<25}: {usage_today['prompt_tokens']:,}`\n"
+            f"`{loc.get_text('usage_completion_tokens', lang_code):<25}: {usage_today['completion_tokens']:,}`\n"
+            f"`{loc.get_text('usage_total_tokens', lang_code):<25}: {usage_today['total_tokens']:,}`\n"
+            f"`{loc.get_text('usage_estimated_cost', lang_code):<25}: ${cost_today:.4f}`\n\n"
+        )
+    else:
+        report_text += f"_{loc.get_text('usage_no_data', lang_code)}_\n\n"
+
+    # Блок "За месяц"
+    report_text += f"{loc.get_text('usage_month_header', lang_code)}\n"
+    if usage_month['total_tokens'] > 0:
+        report_text += (
+            f"`{loc.get_text('usage_prompt_tokens', lang_code):<25}: {usage_month['prompt_tokens']:,}`\n"
+            f"`{loc.get_text('usage_completion_tokens', lang_code):<25}: {usage_month['completion_tokens']:,}`\n"
+            f"`{loc.get_text('usage_total_tokens', lang_code):<25}: {usage_month['total_tokens']:,}`\n"
+            f"`{loc.get_text('usage_estimated_cost', lang_code):<25}: ${cost_month:.4f}`"
+        )
+    else:
+        report_text += f"_{loc.get_text('usage_no_data', lang_code)}_"
+
+    report_text += loc.get_text('usage_cost_notice', lang_code)
+
+    await bot.send_message(user_id, report_text, parse_mode='Markdown')
+
 
 def register_command_handlers(bot: AsyncTeleBot):
     """Регистрирует все обработчики команд и кнопок-синонимов."""
@@ -125,15 +180,13 @@ def register_command_handlers(bot: AsyncTeleBot):
     bot.register_message_handler(handle_start, commands=['start'], pass_bot=True)
     bot.register_message_handler(handle_help, commands=['help'], pass_bot=True)
     bot.register_message_handler(handle_reset, commands=['reset'], pass_bot=True)
-    # Добавляем alias /setapikey
     bot.register_message_handler(handle_set_api_key, commands=['set_api_key', 'setapikey'], pass_bot=True)
     bot.register_message_handler(handle_settings, commands=['settings'], pass_bot=True)
     bot.register_message_handler(handle_history, commands=['history'], pass_bot=True)
     bot.register_message_handler(handle_translate, commands=['translate'], pass_bot=True)
+    bot.register_message_handler(handle_usage, commands=['usage'], pass_bot=True) # <-- РЕГИСТРАЦИЯ НОВОЙ КОМАНДЫ
 
     # Регистрация кнопок-синонимов, которые должны работать как команды
-    # `lambda msg: msg.text in [...]` - проверяет, что текст сообщения точно совпадает с одной из строк
-    # Локализация кнопок берется из `localization.py`
     bot.register_message_handler(handle_translate,
                                  func=lambda msg: msg.text in [loc.get_text('btn_translate', 'ru'),
                                                                loc.get_text('btn_translate', 'en')], pass_bot=True)
@@ -152,5 +205,9 @@ def register_command_handlers(bot: AsyncTeleBot):
     bot.register_message_handler(handle_reset,
                                  func=lambda msg: msg.text in [loc.get_text('btn_reset', 'ru'),
                                                                loc.get_text('btn_reset', 'en')], pass_bot=True)
+    # <-- РЕГИСТРАЦИЯ НОВОЙ КНОПКИ
+    bot.register_message_handler(handle_usage,
+                                 func=lambda msg: msg.text in [loc.get_text('btn_usage', 'ru'),
+                                                               loc.get_text('btn_usage', 'en')], pass_bot=True)
 
     logger.info("Обработчики команд и кнопок-синонимов зарегистрированы.")

@@ -24,7 +24,6 @@ def _get_db_connection() -> sqlite3.Connection:
         db_logger.exception(f"Ошибка подключения к базе данных {DATABASE_NAME}: {e}")
         raise
 
-
 def _execute_query(query: str, params: tuple = (), fetch_one: bool = False, fetch_all: bool = False,
                    is_write_operation: bool = False) -> Optional[Any]:
     """Выполняет SQL-запрос с обработкой соединения и блокировки для операций записи."""
@@ -49,9 +48,9 @@ def _execute_query(query: str, params: tuple = (), fetch_one: bool = False, fetc
                 result = cursor.fetchone()
             elif fetch_all:
                 result = cursor.fetchall()
-            elif "count(" in query.lower():
+            elif "count(" in query.lower() or "sum(" in query.lower(): # ИЗМЕНЕНО: Добавлена проверка на SUM
                 count_result = cursor.fetchone()
-                result = count_result[0] if count_result else 0
+                result = count_result[0] if count_result and count_result[0] is not None else 0
     except sqlite3.Error as e:
         db_logger.exception(f"Ошибка выполнения SQL: {query} | Params: {params} | Error: {e}")
         if conn and is_write_operation:
@@ -68,9 +67,15 @@ def _execute_query(query: str, params: tuple = (), fetch_one: bool = False, fetc
 
 def setup_database():
     """Инициализирует структуру базы данных, если она не существует."""
+    # Требуемые столбцы для таблицы 'users'
     required_user_columns = {
         'user_id', 'bot_style', 'first_interaction_date',
-        'api_key', 'language_code', 'gemini_model'  # <-- ДОБАВЛЕНО ПОЛЕ
+        'api_key', 'language_code', 'gemini_model'
+    }
+    # НОВОЕ: Требуемые столбцы для таблицы 'conversations'
+    required_conversation_columns = {
+        'conversation_id', 'user_id', 'timestamp', 'role', 'message_text',
+        'prompt_tokens', 'completion_tokens', 'total_tokens'
     }
 
     conn = None
@@ -82,6 +87,7 @@ def setup_database():
         existing_tables = {table['name'] for table in tables}
         db_logger.info(f"Существующие таблицы: {existing_tables}")
 
+        # Проверка и обновление таблицы 'users'
         if 'users' not in existing_tables:
             db_logger.info("Таблица 'users' не найдена, создаем...")
             cursor.execute("""
@@ -99,20 +105,17 @@ def setup_database():
             cursor.execute("PRAGMA table_info(users)")
             current_columns = {col['name'] for col in cursor.fetchall()}
             missing_columns = required_user_columns - current_columns
-
             for col in missing_columns:
                 db_logger.info(f"Добавляем отсутствующий столбец '{col}' в таблицу 'users'...")
                 col_type = 'TEXT'
                 default_val_str = 'DEFAULT NULL'
                 not_null_str = ''
-
                 if col == 'bot_style':
                     default_val_str = "DEFAULT 'default'"
                     not_null_str = 'NOT NULL'
                 elif col == 'language_code':
                     default_val_str = "DEFAULT 'ru'"
                     not_null_str = 'NOT NULL'
-
                 try:
                     add_col_query = f"ALTER TABLE users ADD COLUMN {col} {col_type} {not_null_str} {default_val_str}"
                     cursor.execute(add_col_query)
@@ -126,6 +129,7 @@ def setup_database():
             cursor.execute("DROP TABLE reminders")
             db_logger.info("Таблица 'reminders' успешно удалена.")
 
+        # Проверка и обновление таблицы 'conversations'
         if 'conversations' not in existing_tables:
             db_logger.info("Таблица 'conversations' не найдена, создаем...")
             cursor.execute("""
@@ -135,11 +139,28 @@ def setup_database():
                     timestamp TEXT NOT NULL,
                     role TEXT NOT NULL CHECK(role IN ('user', 'bot', 'system')),
                     message_text TEXT,
+                    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                    completion_tokens INTEGER NOT NULL DEFAULT 0,
+                    total_tokens INTEGER NOT NULL DEFAULT 0,
                     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
                 )
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user_time ON conversations (user_id, timestamp)")
             db_logger.info("Таблица 'conversations' и индекс успешно созданы.")
+        else:
+            # НОВОЕ: Логика миграции для 'conversations'
+            cursor.execute("PRAGMA table_info(conversations)")
+            current_columns = {col['name'] for col in cursor.fetchall()}
+            missing_columns = required_conversation_columns - current_columns
+            for col in missing_columns:
+                if col in ['prompt_tokens', 'completion_tokens', 'total_tokens']:
+                    db_logger.info(f"Добавляем отсутствующий столбец '{col}' в таблицу 'conversations'...")
+                    try:
+                        add_col_query = f"ALTER TABLE conversations ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0"
+                        cursor.execute(add_col_query)
+                        db_logger.info(f"Столбец '{col}' успешно добавлен в 'conversations'.")
+                    except sqlite3.OperationalError as alter_err:
+                        db_logger.warning(f"Не удалось добавить столбец {col} в conversations: {alter_err}")
 
         conn.commit()
         db_logger.info("Проверка и настройка базы данных завершена.")
@@ -189,7 +210,6 @@ def set_user_api_key(user_id: int, api_key: str):
     except Exception as e:
         db_logger.exception(f"Ошибка при шифровании и сохранении API-ключа для {user_id}: {e}", extra={'user_id': str(user_id)})
 
-
 def get_user_api_key(user_id: int) -> Optional[str]:
     query = "SELECT api_key FROM users WHERE user_id = ?"
     result = _execute_query(query, (user_id,), fetch_one=True)
@@ -218,7 +238,6 @@ def get_user_language(user_id: int) -> str:
     result = _execute_query(query, (user_id,), fetch_one=True)
     return result['language_code'] if result and result['language_code'] else 'ru'
 
-# --- НОВЫЕ ФУНКЦИИ ДЛЯ МОДЕЛИ ---
 def set_user_gemini_model(user_id: int, model_name: str):
     """Устанавливает выбранную модель Gemini для пользователя."""
     add_or_update_user(user_id)
@@ -234,12 +253,20 @@ def get_user_gemini_model(user_id: int) -> Optional[str]:
 
 # --- Функции для работы с историей сообщений (conversations) ---
 
-def store_message(user_id: int, role: str, message_text: str):
+# ИЗМЕНЕНО: Функция теперь принимает информацию о токенах
+def store_message(user_id: int, role: str, message_text: str,
+                  prompt_tokens: int = 0, completion_tokens: int = 0, total_tokens: int = 0):
+    """Сохраняет сообщение в базу данных, включая информацию о токенах."""
     if role not in ('user', 'bot', 'system'):
         return
     timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    query = "INSERT INTO conversations (user_id, timestamp, role, message_text) VALUES (?, ?, ?, ?)"
-    _execute_query(query, (user_id, timestamp, role, message_text), is_write_operation=True)
+    query = """
+        INSERT INTO conversations 
+        (user_id, timestamp, role, message_text, prompt_tokens, completion_tokens, total_tokens) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """
+    params = (user_id, timestamp, role, message_text, prompt_tokens, completion_tokens, total_tokens)
+    _execute_query(query, params, is_write_operation=True)
 
 def get_conversation_history(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
     query = "SELECT role, message_text FROM conversations WHERE user_id = ? ORDER BY conversation_id DESC LIMIT ?"
@@ -262,3 +289,45 @@ def get_first_interaction_date(user_id: int) -> Optional[str]:
     query = "SELECT first_interaction_date FROM users WHERE user_id = ?"
     result = _execute_query(query, (user_id,), fetch_one=True)
     return result['first_interaction_date'] if result else None
+
+# НОВАЯ ФУНКЦИЯ: для получения статистики по токенам
+def get_token_usage_by_period(user_id: int, period: str) -> Dict[str, int]:
+    """
+    Возвращает суммарное количество токенов за указанный период ('today' или 'month').
+    """
+    if period == 'today':
+        # Используем функции даты SQLite
+        start_date_str = datetime.date.today().isoformat() + "T00:00:00Z"
+    elif period == 'month':
+        start_date_str = datetime.date.today().replace(day=1).isoformat() + "T00:00:00Z"
+    else:
+        return {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
+
+    query = """
+        SELECT 
+            SUM(prompt_tokens), 
+            SUM(completion_tokens), 
+            SUM(total_tokens) 
+        FROM conversations 
+        WHERE user_id = ? AND timestamp >= ?
+    """
+    params = (user_id, start_date_str)
+
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(query, params)
+        result = cursor.fetchone()
+        if result and result[0] is not None:
+            return {
+                'prompt_tokens': int(result[0]),
+                'completion_tokens': int(result[1]),
+                'total_tokens': int(result[2])
+            }
+    except sqlite3.Error as e:
+        db_logger.exception(f"Ошибка при получении статистики токенов за период '{period}' для user {user_id}: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+    return {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}

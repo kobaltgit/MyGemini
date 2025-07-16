@@ -20,15 +20,17 @@ logger = get_logger('markup_helpers')
 
 def create_main_keyboard(lang_code: str) -> types.ReplyKeyboardMarkup:
     """Создает основную клавиатуру с кнопками команд на основе языка пользователя."""
-    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True) # ИЗМЕНЕНО: row_width=3
 
+    # ИЗМЕНЕНО: Добавляем кнопку "Расходы" и меняем компоновку
     buttons = [
+        types.KeyboardButton(loc.get_text('btn_account', lang_code)),
+        types.KeyboardButton(loc.get_text('btn_usage', lang_code)),
+        types.KeyboardButton(loc.get_text('btn_settings', lang_code)),
         types.KeyboardButton(loc.get_text('btn_translate', lang_code)),
         types.KeyboardButton(loc.get_text('btn_history', lang_code)),
-        types.KeyboardButton(loc.get_text('btn_account', lang_code)),
-        types.KeyboardButton(loc.get_text('btn_settings', lang_code)),
-        types.KeyboardButton(loc.get_text('btn_help', lang_code)),
         types.KeyboardButton(loc.get_text('btn_reset', lang_code)),
+        types.KeyboardButton(loc.get_text('btn_help', lang_code)),
     ]
     markup.add(*buttons)
     return markup
