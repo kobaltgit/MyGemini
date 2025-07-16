@@ -4,12 +4,13 @@ import datetime
 from typing import List, Optional, Dict, Any
 
 from config.settings import (
-    BOT_STYLES, TRANSLATE_LANGUAGES,
+    BOT_STYLES, TRANSLATE_LANGUAGES, BOT_PERSONAS, # <-- Импортируем BOT_PERSONAS
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_IGNORE,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX,
     CALLBACK_REPORT_ERROR, CALLBACK_LANG_PREFIX,
     CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY,
-    CALLBACK_SETTINGS_CHOOSE_MODEL_MENU, CALLBACK_SETTINGS_MODEL_PREFIX, CALLBACK_SETTINGS_BACK_TO_MAIN
+    CALLBACK_SETTINGS_CHOOSE_MODEL_MENU, CALLBACK_SETTINGS_MODEL_PREFIX, CALLBACK_SETTINGS_BACK_TO_MAIN,
+    CALLBACK_SETTINGS_PERSONA_MENU, CALLBACK_SETTINGS_PERSONA_PREFIX # <-- Импортируем префиксы для персон
 )
 from database import db_manager
 from logger_config import get_logger
@@ -20,9 +21,8 @@ logger = get_logger('markup_helpers')
 
 def create_main_keyboard(lang_code: str) -> types.ReplyKeyboardMarkup:
     """Создает основную клавиатуру с кнопками команд на основе языка пользователя."""
-    markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True) # ИЗМЕНЕНО: row_width=3
+    markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
 
-    # ИЗМЕНЕНО: Добавляем кнопку "Расходы" и меняем компоновку
     buttons = [
         types.KeyboardButton(loc.get_text('btn_account', lang_code)),
         types.KeyboardButton(loc.get_text('btn_usage', lang_code)),
@@ -74,6 +74,14 @@ def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     )
     markup.add(model_button)
 
+    # --- НОВАЯ СЕКЦИЯ: Выбор персоны ---
+    markup.add(types.InlineKeyboardButton(loc.get_text('settings_persona_section', current_lang), callback_data=CALLBACK_IGNORE))
+    persona_button = types.InlineKeyboardButton(
+        loc.get_text('settings_btn_choose_persona', current_lang),
+        callback_data=CALLBACK_SETTINGS_PERSONA_MENU
+    )
+    markup.add(persona_button)
+
     # --- Секция стиля общения ---
     markup.add(types.InlineKeyboardButton(loc.get_text('settings_style_section', current_lang), callback_data=CALLBACK_IGNORE))
     style_buttons = []
@@ -94,6 +102,35 @@ def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     ]
     markup.add(*lang_buttons)
 
+    return markup
+
+# НОВАЯ ФУНКЦИЯ
+def create_persona_selection_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
+    """Создает клавиатуру для выбора персоны."""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    lang_code = db_manager.get_user_language(user_id)
+    current_persona_id = db_manager.get_user_persona(user_id)
+
+    buttons = []
+    for persona_id, persona_data in BOT_PERSONAS.items():
+        # Получаем имя персоны на нужном языке
+        persona_name = persona_data.get(f"name_{lang_code}", persona_data["name_ru"])
+
+        button_text = f"✅ {persona_name}" if persona_id == current_persona_id else persona_name
+        buttons.append(types.InlineKeyboardButton(
+            text=button_text,
+            callback_data=f"{CALLBACK_SETTINGS_PERSONA_PREFIX}{persona_id}"
+        ))
+
+    # Распределяем кнопки по 2 в ряд
+    for i in range(0, len(buttons), 2):
+        markup.add(*buttons[i:i + 2])
+
+    # Добавляем кнопку "Назад"
+    markup.add(types.InlineKeyboardButton(
+        loc.get_text('btn_back_to_settings', lang_code),
+        callback_data=CALLBACK_SETTINGS_BACK_TO_MAIN
+    ))
     return markup
 
 

@@ -5,10 +5,10 @@ from typing import List, Union, Dict, Optional, Any
 from io import BytesIO
 import base64
 
-from config.settings import GEMINI_MODEL_NAME, GENERATION_CONFIG, SAFETY_SETTINGS
+from config.settings import GEMINI_MODEL_NAME, GENERATION_CONFIG, SAFETY_SETTINGS, BOT_PERSONAS, BOT_STYLES
 from logger_config import get_logger
 from database import db_manager
-from .error_parser import get_user_friendly_error_key # Импортируем наш новый парсер
+from .error_parser import get_user_friendly_error_key
 
 gemini_logger = get_logger('gemini_api')
 
@@ -46,7 +46,7 @@ async def _make_gemini_request_async(api_key: str, url: str, payload: Optional[D
                 if response.status != 200:
                     error_details = response_json.get('error', {})
                     error_message = error_details.get('message', 'Неизвестная ошибка API')
-                    gemini_logger.error(f"Ошибка API Gemini (HTTP {response.status}): {error_message}", extra={'user_id': 'System'})
+                    gemini_logger.error(f"Ошибка API Gemini (HTTP {response.status}): {response_json}", extra={'user_id': 'System'}) # ИЗМЕНЕНО: логируем весь JSON
                     raise GeminiAPIError(error_message, details=error_details)
                 return response_json
     except aiohttp.ClientError as e:
@@ -70,6 +70,8 @@ def _get_user_chat_history(user_id: int) -> List[Dict[str, Any]]:
         history_from_db = db_manager.get_conversation_history(user_id, limit=20)
         gemini_history = []
         for item in history_from_db:
+            if item.get('role') == 'system':
+                continue
             role = 'user' if item.get('role') == 'user' else 'model'
             gemini_history.append({"role": role, "parts": [{"text": item.get('message_text', '')}]})
         user_chats[user_id] = gemini_history
@@ -85,15 +87,47 @@ def reset_user_chat(user_id: int):
         gemini_logger.info(f"История чата в кэше для user_id: {user_id} сброшена.", extra={'user_id': str(user_id)})
 
 
+# ИЗМЕНЕНО: Функция теперь возвращает только текст инструкции
+def _get_system_instruction_text(user_id: int) -> Optional[str]:
+    """
+    Формирует текст системной инструкции на основе персоны и стиля пользователя.
+    Приоритет у персоны.
+    """
+    lang_code = db_manager.get_user_language(user_id)
+    persona_id = db_manager.get_user_persona(user_id)
+
+    if persona_id != 'default':
+        persona_info = BOT_PERSONAS.get(persona_id, BOT_PERSONAS['default'])
+        prompt_key = f"prompt_{lang_code}"
+        prompt_text = persona_info.get(prompt_key, persona_info.get('prompt_ru', ''))
+        return prompt_text.strip() if prompt_text else None
+
+    style_id = db_manager.get_user_bot_style(user_id)
+    if style_id != 'default':
+        style_prompts = {
+            'formal': "You must answer in a strictly formal and business-like manner.",
+            'informal': "You should communicate in a friendly and informal way.",
+            'concise': "Your answers must be as short and to the point as possible.",
+            'detailed': "Provide detailed and comprehensive answers, explaining all aspects."
+        }
+        return style_prompts.get(style_id)
+
+    return None
+
+
 async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[Union[str, PIL.Image.Image]]], store_in_db: bool = True) -> str:
     """
-    Генерирует ответ от Gemini.
+    Генерирует ответ от Gemini, учитывая персону.
     Выбрасывает GeminiAPIError в случае сбоя.
     """
     model_name = db_manager.get_user_gemini_model(user_id) or GEMINI_MODEL_NAME
     gemini_logger.info(f"Используется модель '{model_name}' для user_id: {user_id}", extra={'user_id': str(user_id)})
+
     history = _get_user_chat_history(user_id)
+
+    # Формируем историю и текущее сообщение пользователя
     request_contents = list(history)
+
     user_message_for_db = ""
     user_parts = []
     if isinstance(prompt, str):
@@ -112,29 +146,41 @@ async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[
                 user_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_str}})
         user_parts.append({"text": text_part})
         user_message_for_db = f"[Изображение] {text_part}".strip()
+
     request_contents.append({"role": "user", "parts": user_parts})
 
-    # ИЗМЕНЕНО: Сообщение пользователя сохраняется без токенов, так как токены относятся ко всему обмену
     if store_in_db and user_message_for_db:
         db_manager.store_message(user_id, 'user', user_message_for_db)
 
     url = f"{GEMINI_API_BASE_URL}/models/{model_name}:generateContent"
-    payload = {"contents": request_contents, "generationConfig": GENERATION_CONFIG, "safetySettings": SAFETY_SETTINGS}
+
+    # ИЗМЕНЕНО: Формируем payload с правильной структурой
+    payload = {
+        "contents": request_contents,
+        "generationConfig": GENERATION_CONFIG,
+        "safetySettings": SAFETY_SETTINGS
+    }
+
+    system_instruction_text = _get_system_instruction_text(user_id)
+    if system_instruction_text:
+        payload["system_instruction"] = {
+            "role": "system",
+            "parts": [{"text": system_instruction_text}]
+        }
 
     try:
         response_json = await _make_gemini_request_async(api_key, url, payload, 'POST')
         if not response_json or "candidates" not in response_json:
             raise GeminiAPIError("Ответ API не содержит 'candidates'.", details=response_json)
 
-        # Проверка на safety settings
         if response_json["candidates"][0].get("finishReason") == "SAFETY":
              raise GeminiAPIError("Ответ заблокирован настройками безопасности.", details={"finish_reason": "SAFETY"})
 
         response_text = response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+
         history.append({"role": "user", "parts": user_parts})
         history.append({"role": "model", "parts": [{"text": response_text}]})
 
-        # НОВОЕ: Извлекаем информацию о токенах
         usage_metadata = response_json.get('usageMetadata', {})
         prompt_tokens = usage_metadata.get('promptTokenCount', 0)
         completion_tokens = usage_metadata.get('candidatesTokenCount', 0)
@@ -146,7 +192,6 @@ async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[
         )
 
         if store_in_db:
-            # ИЗМЕНЕНО: Сохраняем сообщение бота вместе с информацией о токенах
             db_manager.store_message(
                 user_id=user_id,
                 role='bot',
@@ -160,7 +205,6 @@ async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[
         gemini_logger.error(f"Ошибка парсинга ответа от Gemini: {e}", extra={'user_id': str(user_id)})
         raise GeminiAPIError(f"Ошибка чтения ответа от API: {e}", details={"error": {"message": "parsing_error"}})
     except GeminiAPIError as e:
-        # Если произошла ошибка, удаляем последнее сообщение пользователя из истории в кэше, чтобы не засорять контекст
         if history: history.pop()
         raise e
 
@@ -171,8 +215,6 @@ async def generate_content_simple(api_key: str, prompt: str) -> str:
     payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
     response_json = await _make_gemini_request_async(api_key, url, payload, 'POST')
     try:
-        # Примечание: простой запрос тоже возвращает токены, но мы их здесь не отслеживаем,
-        # так как это используется для внутренних нужд (анализ тем, перевод), а не для основного чата.
         return response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
     except (KeyError, IndexError) as e:
         raise GeminiAPIError(f"Ошибка чтения ответа от API: {e}", details={"error": {"message": "parsing_error"}})

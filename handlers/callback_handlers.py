@@ -9,14 +9,14 @@ from config.settings import (
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX, STATE_WAITING_FOR_HISTORY_DATE,
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY,
     CALLBACK_SETTINGS_CHOOSE_MODEL_MENU, CALLBACK_SETTINGS_MODEL_PREFIX,
-    CALLBACK_IGNORE, STATE_WAITING_FOR_API_KEY
+    CALLBACK_IGNORE, STATE_WAITING_FOR_API_KEY,
+    CALLBACK_SETTINGS_PERSONA_MENU, CALLBACK_SETTINGS_PERSONA_PREFIX, BOT_PERSONAS # <-- Импорты для персон
 )
 from database import db_manager
 from services import gemini_service
-from services.gemini_service import GeminiAPIError # Импортируем кастомное исключение
+from services.gemini_service import GeminiAPIError 
 from utils import markup_helpers as mk
 from utils import localization as loc
-# УДАЛЕНО: from .states import user_states
 from . import telegram_helpers as tg_helpers
 
 from logger_config import get_logger
@@ -50,6 +50,11 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
             await handle_language_setting(bot, call)
         elif data == CALLBACK_SETTINGS_SET_API_KEY:
             await handle_set_api_key_from_settings(bot, call, lang_code)
+        # НОВЫЕ УСЛОВИЯ ДЛЯ ПЕРСОН
+        elif data == CALLBACK_SETTINGS_PERSONA_MENU:
+            await handle_persona_menu(bot, call, lang_code)
+        elif data.startswith(CALLBACK_SETTINGS_PERSONA_PREFIX):
+            await handle_persona_selection(bot, call, lang_code)
         elif data == CALLBACK_SETTINGS_CHOOSE_MODEL_MENU:
             await handle_choose_model_menu(bot, call, lang_code)
         elif data.startswith(CALLBACK_SETTINGS_MODEL_PREFIX):
@@ -63,10 +68,8 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
         else:
             await tg_helpers.answer_callback_query(bot, call, text="Unknown action", show_alert=True)
     except GeminiAPIError as e:
-        # Ловим ошибку и показываем пользователю
         user_friendly_error = loc.get_text(e.error_key, lang_code)
         await tg_helpers.answer_callback_query(bot, call, text=user_friendly_error, show_alert=True)
-        # Возвращаем пользователя в главное меню настроек, чтобы он не застрял
         await handle_back_to_main_settings(bot, call, lang_code)
     except Exception as e:
         logger.exception(f"Критическая ошибка обработки callback query: {e}", extra={'user_id': str(user_id)})
@@ -90,7 +93,6 @@ async def handle_back_to_main_settings(bot: AsyncTeleBot, call: types.CallbackQu
 
 async def handle_set_api_key_from_settings(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Обрабатывает нажатие на кнопку установки API-ключа в настройках."""
-    # ИЗМЕНЕНО: Устанавливаем состояние через бота
     await bot.set_state(call.from_user.id, STATE_WAITING_FOR_API_KEY, call.message.chat.id)
     await tg_helpers.answer_callback_query(bot, call)
     await tg_helpers.edit_message_text_safe(
@@ -129,7 +131,43 @@ async def handle_style_setting(bot: AsyncTeleBot, call: types.CallbackQuery, lan
         )
         await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('style_changed_notice', lang_code))
 
-# --- Новые обработчики для выбора модели ---
+# --- НОВЫЕ ОБРАБОТЧИКИ ДЛЯ ВЫБОРА ПЕРСОНЫ ---
+
+async def handle_persona_menu(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
+    """Отображает меню выбора персоны."""
+    user_id = call.from_user.id
+    keyboard = mk.create_persona_selection_keyboard(user_id)
+    text = (f"{loc.get_text('persona_selection_title', lang_code)}\n\n"
+            f"{loc.get_text('persona_selection_desc', lang_code)}")
+    await tg_helpers.edit_message_text_safe(
+        bot, call.message.chat.id, call.message.message_id,
+        text=text,
+        reply_markup=keyboard
+    )
+    await tg_helpers.answer_callback_query(bot, call)
+
+async def handle_persona_selection(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
+    """Обрабатывает выбор конкретной персоны."""
+    user_id = call.from_user.id
+    persona_id = call.data[len(CALLBACK_SETTINGS_PERSONA_PREFIX):]
+
+    if persona_id in BOT_PERSONAS:
+        db_manager.set_user_persona(user_id, persona_id)
+        gemini_service.reset_user_chat(user_id)
+
+        # Получаем имя персоны на языке пользователя для уведомления
+        persona_info = BOT_PERSONAS[persona_id]
+        persona_name = persona_info.get(f"name_{lang_code}", persona_info['name_ru'])
+
+        # Возвращаемся в главное меню настроек
+        await handle_back_to_main_settings(bot, call, lang_code)
+
+        await tg_helpers.answer_callback_query(
+            bot, call,
+            text=loc.get_text('persona_changed_notice', lang_code).format(persona_name=persona_name)
+        )
+
+# --- Обработчики выбора модели ---
 
 async def handle_choose_model_menu(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Отображает меню выбора модели."""
@@ -146,14 +184,12 @@ async def handle_choose_model_menu(bot: AsyncTeleBot, call: types.CallbackQuery,
         reply_markup=None
     )
 
-    # Здесь может возникнуть GeminiAPIError, которая будет поймана выше
     models = await gemini_service.get_available_models(api_key)
     if not models:
         await tg_helpers.edit_message_text_safe(
             bot, call.message.chat.id, call.message.message_id,
             text=loc.get_text('model_selection_error', lang_code)
         )
-        # Возвращаем пользователя в главное меню настроек
         await handle_back_to_main_settings(bot, call, lang_code)
         return
 
@@ -181,7 +217,7 @@ async def handle_model_selection(bot: AsyncTeleBot, call: types.CallbackQuery, l
         text=loc.get_text('model_changed_notice', lang_code).format(model_name=model_name)
     )
 
-# ---------------------------------------------
+# --- Прочие обработчики ---
 
 async def handle_language_selection_for_translation(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Обрабатывает выбор языка для перевода."""
@@ -189,7 +225,6 @@ async def handle_language_selection_for_translation(bot: AsyncTeleBot, call: typ
     target_lang_code = call.data[len(CALLBACK_LANG_PREFIX):]
     lang_name = TRANSLATE_LANGUAGES.get(target_lang_code, target_lang_code)
 
-    # ИЗМЕНЕНО: Устанавливаем состояние и сохраняем данные через бота
     await bot.set_state(user_id, STATE_WAITING_FOR_TRANSLATE_TEXT, call.message.chat.id)
     await bot.add_data(user_id, call.message.chat.id, target_lang=target_lang_code)
 
@@ -206,7 +241,6 @@ async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.Callback
     user_id = call.from_user.id
     selected_date_str = call.data[len(CALLBACK_CALENDAR_DATE_PREFIX):]
 
-    # ИЗМЕНЕНО: Получаем текущее состояние через бота
     current_state = await bot.get_state(user_id, call.message.chat.id)
 
     if current_state == STATE_WAITING_FOR_HISTORY_DATE:
@@ -232,13 +266,11 @@ async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.Callback
             else:
                 await bot.send_message(user_id, loc.get_text('history_no_messages', lang_code))
 
-            # ИЗМЕНЕНО: Сбрасываем состояние через бота
             await bot.delete_state(user_id, call.message.chat.id)
 
         except (ValueError, TypeError) as e:
             logger.error(f"Ошибка при обработке даты истории '{selected_date_str}' для user_id {user_id}: {e}", extra={'user_id': str(user_id)})
             await bot.send_message(user_id, loc.get_text('history_date_error', lang_code))
-            # ИЗМЕНЕНО: Сбрасываем состояние через бота
             await bot.delete_state(user_id, call.message.chat.id)
 
 

@@ -1,3 +1,4 @@
+# File: features/personal_account.py
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 
@@ -6,10 +7,11 @@ from database.db_manager import (
     get_conversation_count,
     get_first_interaction_date,
     get_conversation_history,
-    get_user_language, # Импортируем для отображения языка
-    get_user_api_key   # Импортируем для отображения статуса ключа
+    get_user_language,
+    get_user_api_key,
+    get_user_persona # <-- Импортируем новую функцию
 )
-from config.settings import BOT_STYLES
+from config.settings import BOT_STYLES, BOT_PERSONAS # <-- Импортируем персоны
 from utils.analysis_helpers import extract_frequent_topics
 from services.gemini_service import generate_content_simple
 from logger_config import get_logger
@@ -44,7 +46,6 @@ async def _get_topic_description(user_id: int, api_key: str) -> str:
         conversation_history_raw = get_conversation_history(user_id, limit=50)
         if not conversation_history_raw:
              return "Пока недостаточно данных для анализа. / Not enough data for analysis yet."
-
         frequent_topics = extract_frequent_topics(conversation_history_raw, top_n=7)
         if not frequent_topics:
             return "Пока недостаточно данных для анализа. / Not enough data for analysis yet."
@@ -72,19 +73,25 @@ async def get_personal_account_info(user_id: int) -> str:
     conversation_count = get_conversation_count(user_id)
     first_interaction_date_str = get_first_interaction_date(user_id)
     user_lang = get_user_language(user_id)
-    user_api_key = get_user_api_key(user_id) # Получаем ключ для анализа тем
+    user_api_key = get_user_api_key(user_id)
+    persona_id = get_user_persona(user_id) # <-- Получаем ID персоны
 
     # Рассчитываем производные данные
     title: str = _get_user_title(conversation_count)
     days_active: str = _get_days_since_start(first_interaction_date_str)
     style_name: str = BOT_STYLES.get(bot_style_code, BOT_STYLES['default'])
+
+    # НОВОЕ: Получаем имя персоны на нужном языке
+    persona_info = BOT_PERSONAS.get(persona_id, BOT_PERSONAS['default'])
+    persona_name = persona_info.get(f"name_{user_lang}", persona_info['name_ru'])
+
     api_key_status = "✅ Установлен / Set" if user_api_key else "❌ Не установлен / Not Set"
 
     topics_description = "Для анализа нужен API ключ / API key required for analysis"
     if user_api_key:
         topics_description = await _get_topic_description(user_id, user_api_key)
 
-    # Формируем текст ответа
+    # ИЗМЕНЕНО: Формируем текст ответа с учетом персоны
     info_text = f"""
 👤 *Личный кабинет / My Account* 👤
 
@@ -93,6 +100,7 @@ async def get_personal_account_info(user_id: int) -> str:
 🗓️ *Вы с нами (дней) / You are with us (days):* {days_active}
 
 --- *Настройки / Settings* ---
+🎭 *Текущая персона / Persona:* {persona_name}
 🎨 *Стиль общения / Bot Style:* {style_name}
 🌐 *Язык / Language:* {"Русский" if user_lang == 'ru' else "English"}
 🔑 *API Ключ / API Key:* {api_key_status}

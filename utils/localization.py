@@ -21,7 +21,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
                          "*/settings* - Открыть меню настроек (стиль общения, язык, API ключ).\n"
                          "*/history* - Посмотреть историю сообщений за определенную дату.\n"
                          "*/translate* - Перевести текст на другой язык.\n"
-                         "*/usage* - Посмотреть статистику использования токенов за сегодня и за месяц.", # <-- НОВЫЙ ПУНКТ
+                         "*/usage* - Посмотреть статистику использования токенов за сегодня и за месяц.",
         # --- Настройки ---
         'settings_title': "⚙️ *Настройки бота*",
         'settings_style_section': "--- Стиль общения бота ---",
@@ -30,13 +30,19 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_btn_set_api_key': "🔑 Установить/обновить API ключ",
         'settings_model_section': "--- Нейросетевая модель ---",
         'settings_btn_choose_model': "🧠 Выбрать модель",
+        'settings_persona_section': "--- Роль ассистента (Персона) ---", # НОВОЕ
+        'settings_btn_choose_persona': "🎭 Выбрать персону", # НОВОЕ
         'style_changed_notice': "Стиль общения изменен. Контекст диалога сброшен.",
+        'persona_changed_notice': "✅ Персона изменена на *{persona_name}*. Контекст диалога сброшен.", # НОВОЕ
         # --- Выбор модели ---
         'model_selection_title': "🧠 *Выбор модели Gemini*",
         'model_selection_loading': "⏳ Загружаю список доступных моделей...",
         'model_selection_error': "❌ Не удалось загрузить список моделей. Проверьте ваш API ключ или попробуйте позже.",
         'model_changed_notice': "✅ Модель изменена на *{model_name}*. Контекст диалога сброшен.",
         'btn_back_to_settings': "⬅️ Назад в настройки",
+        # --- НОВОЕ: Выбор персоны ---
+        'persona_selection_title': "🎭 *Выбор персоны ассистента*",
+        'persona_selection_desc': "Выберите роль, которую бот будет отыгрывать. Это изменит его стиль общения и экспертизу. Текущие *стили* (краткий, подробный и т.д.) будут игнорироваться.",
         # --- Команды и Состояния ---
         'cmd_reset_success': "✅ Контекст разговора и ваше текущее состояние сброшены.",
         'set_api_key_prompt': "Пожалуйста, отправьте ваш Google AI API ключ. Сообщение с ключом будет удалено.",
@@ -58,7 +64,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'history_role_bot': "Бот",
         'history_no_messages': "В этот день сообщений не найдено.",
         'history_date_error': "Произошла ошибка при обработке даты. Попробуйте еще раз.",
-        # --- НОВОЕ: Статистика расходов ---
+        # --- Статистика расходов ---
         'usage_title': "📊 *Статистика расходов токенов*",
         'usage_today_header': "*За сегодня:*",
         'usage_month_header': "*За текущий месяц:*",
@@ -87,7 +93,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'btn_settings': "⚙️ Настройки",
         'btn_help': "❓ Помощь",
         'btn_reset': "🔄 Сброс",
-        'btn_usage': "📊 Расходы", # <-- НОВАЯ КНОПКА
+        'btn_usage': "📊 Расходы",
     },
     'en': {
         # --- Welcome and Help ---
@@ -107,7 +113,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
                          "*/settings* - Open the settings menu (communication style, language, API key).\n"
                          "*/history* - View message history for a specific date.\n"
                          "*/translate* - Translate text to another language.\n"
-                         "*/usage* - View token usage statistics for today and this month.", # <-- NEW ITEM
+                         "*/usage* - View token usage statistics for today and this month.",
         # --- Settings ---
         'settings_title': "⚙️ *Bot Settings*",
         'settings_style_section': "--- Bot Communication Style ---",
@@ -116,13 +122,19 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_btn_set_api_key': "🔑 Set/Update API Key",
         'settings_model_section': "--- Neural Network Model ---",
         'settings_btn_choose_model': "🧠 Choose Model",
+        'settings_persona_section': "--- Assistant's Role (Persona) ---", # NEW
+        'settings_btn_choose_persona': "🎭 Choose Persona", # NEW
         'style_changed_notice': "Communication style changed. The conversation context has been reset.",
+        'persona_changed_notice': "✅ Persona changed to *{persona_name}*. The conversation context has been reset.", # NEW
         # --- Model Selection ---
         'model_selection_title': "🧠 *Gemini Model Selection*",
         'model_selection_loading': "⏳ Loading list of available models...",
         'model_selection_error': "❌ Could not load the model list. Please check your API key or try again later.",
         'model_changed_notice': "✅ Model changed to *{model_name}*. The conversation context has been reset.",
         'btn_back_to_settings': "⬅️ Back to Settings",
+        # --- NEW: Persona Selection ---
+        'persona_selection_title': "🎭 *Assistant Persona Selection*",
+        'persona_selection_desc': "Choose a role for the bot to play. This will change its communication style and expertise. Current *styles* (concise, detailed, etc.) will be ignored.",
         # --- Commands and States ---
         'cmd_reset_success': "✅ The conversation context and your current state have been reset.",
         'set_api_key_prompt': "Please send your Google AI API key. The message with the key will be deleted.",
@@ -144,7 +156,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'history_role_bot': "Bot",
         'history_no_messages': "No messages found on this day.",
         'history_date_error': "An error occurred while processing the date. Please try again.",
-        # --- NEW: Usage Statistics ---
+        # --- Usage Statistics ---
         'usage_title': "📊 *Token Usage Statistics*",
         'usage_today_header': "*For Today:*",
         'usage_month_header': "*For Current Month:*",
@@ -173,7 +185,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'btn_settings': "⚙️ Settings",
         'btn_help': "❓ Help",
         'btn_reset': "🔄 Reset",
-        'btn_usage': "📊 Usage", # <-- NEW BUTTON
+        'btn_usage': "📊 Usage",
     }
 }
 
