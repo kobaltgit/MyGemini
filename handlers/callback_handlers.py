@@ -85,8 +85,7 @@ async def handle_set_api_key_from_settings(bot: AsyncTeleBot, call: types.Callba
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=loc.get_text('set_api_key_prompt', lang_code),
-        reply_markup=None, # Убираем инлайн-клавиатуру
-        parse_mode='Markdown'
+        reply_markup=None # Убираем инлайн-клавиатуру
     )
 
 
@@ -101,7 +100,7 @@ async def handle_language_setting(bot: AsyncTeleBot, call: types.CallbackQuery):
     await tg_helpers.edit_message_text_safe(
         bot, call.message.chat.id, call.message.message_id,
         loc.get_text('settings_title', new_lang_code),
-        reply_markup=new_markup, parse_mode='Markdown'
+        reply_markup=new_markup
     )
     await tg_helpers.answer_callback_query(bot, call, text=f"Language set to {'English' if new_lang_code == 'en' else 'Русский'}")
 
@@ -121,7 +120,7 @@ async def handle_style_setting(bot: AsyncTeleBot, call: types.CallbackQuery):
         await tg_helpers.edit_message_text_safe(
             bot, call.message.chat.id, call.message.message_id,
             loc.get_text('settings_title', lang_code),
-            reply_markup=new_markup, parse_mode='Markdown'
+            reply_markup=new_markup
         )
         await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('style_changed_notice', lang_code))
 
@@ -140,7 +139,7 @@ async def handle_language_selection_for_translation(bot: AsyncTeleBot, call: typ
     text = loc.get_text('send_text_to_translate_prompt', lang_code).format(lang_name=lang_name)
     await tg_helpers.edit_message_text_safe(
         bot, call.message.chat.id, call.message.message_id,
-        text, reply_markup=None, parse_mode='Markdown'
+        text, reply_markup=None
     )
 
 
@@ -154,7 +153,7 @@ async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.Callback
         await tg_helpers.edit_message_text_safe(
             bot, call.message.chat.id, call.message.message_id,
             loc.get_text('history_loading', lang_code),
-            reply_markup=None, parse_mode=None
+            reply_markup=None
         )
 
         try:
@@ -168,7 +167,7 @@ async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.Callback
                     prefix = f"👤 *{loc.get_text('history_role_user', lang_code)}:*" if role == 'user' else f"🤖 *{loc.get_text('history_role_bot', lang_code)}:*"
                     history_text += f"{prefix}\n{item.get('message_text', '')}\n\n"
 
-                await tg_helpers.send_long_message(bot, user_id, history_text, parse_mode='Markdown')
+                await tg_helpers.send_long_message(bot, user_id, history_text)
             else:
                 await bot.send_message(user_id, loc.get_text('history_no_messages', lang_code))
 

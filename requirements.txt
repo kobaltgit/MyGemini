@@ -1,9 +1,7 @@
+# File: requirements.txt
 # Telegram Bot Core (Async version)
 pyTelegramBotAPI[async]>=4.15.0
 aiohttp>=3.8.0
-
-# Google Gemini API (больше не используется напрямую, но может быть полезно)
-# google-generativeai>=0.4.0
 
 # Loading .env files
 python-dotenv>=1.0.0
@@ -16,3 +14,7 @@ cryptography>=42.0.0
 
 # Image processing
 Pillow>=10.0.0
+
+# Markdown processing and splitting for Telegram
+chatgpt-md-converter>=1.2.0
+git+https://github.com/kobaltgit/telegram_text_splitter.git

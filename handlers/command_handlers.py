@@ -35,7 +35,7 @@ async def handle_start(message: types.Message, bot: AsyncTeleBot):
     welcome_text = loc.get_text('welcome', lang_code).format(name=first_name)
     await tg_helpers.send_long_message(
         bot, user_id, welcome_text,
-        reply_markup=mk.create_main_keyboard(lang_code), parse_mode='Markdown'
+        reply_markup=mk.create_main_keyboard(lang_code)
     )
 
 
@@ -46,7 +46,7 @@ async def handle_help(message: types.Message, bot: AsyncTeleBot):
     help_text = loc.get_text('cmd_help_text', lang_code)
     await tg_helpers.send_long_message(
         bot, user_id, help_text,
-        reply_markup=mk.create_main_keyboard(lang_code), parse_mode='Markdown'
+        reply_markup=mk.create_main_keyboard(lang_code)
     )
 
 
@@ -91,7 +91,7 @@ async def handle_settings(message: types.Message, bot: AsyncTeleBot):
     settings_markup = mk.create_settings_keyboard(user_id)
     await bot.send_message(
         user_id, loc.get_text('settings_title', lang_code),
-        reply_markup=settings_markup, parse_mode='Markdown'
+        reply_markup=settings_markup
     )
 
 
@@ -113,7 +113,7 @@ async def handle_personal_account_button(message: types.Message, bot: AsyncTeleB
     lang_code = db_manager.get_user_language(user_id)
     await tg_helpers.send_long_message(
         bot, user_id, info_text,
-        reply_markup=mk.create_main_keyboard(lang_code), parse_mode='Markdown'
+        reply_markup=mk.create_main_keyboard(lang_code)
     )
 
 

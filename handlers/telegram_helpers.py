@@ -6,6 +6,8 @@ import asyncio
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 from telebot import apihelper
+from telegram_text_splitter import split_markdown_into_chunks
+from chatgpt_md_converter import telegram_format
 
 from config.settings import ADMIN_USER_ID
 from logger_config import get_logger
@@ -27,24 +29,43 @@ async def send_typing_action(bot: AsyncTeleBot, chat_id: int):
 
 async def send_long_message(bot: AsyncTeleBot, chat_id: int, text: str, **kwargs):
     """
-    Отправляет длинное сообщение, разбивая его на части, если необходимо.
-    Использует утилиту `text_helpers.split_message`.
+    Отправляет длинное сообщение, используя telegram_text_splitter для разделения
+    Markdown на корректные фрагменты и chatgpt-md-converter для преобразования в HTML.
     """
     if not text:
         return
 
-    parts = th.split_message(text)
-    total_parts = len(parts)
+    # Убираем parse_mode из kwargs, так как мы будем управлять им сами (всегда HTML)
+    kwargs.pop('parse_mode', None)
 
-    for i, part in enumerate(parts):
-        # Для последней части передаем все оригинальные kwargs (например, reply_markup)
-        if i == total_parts - 1:
-            await bot.send_message(chat_id, part, **kwargs)
-        else:
-            # Для промежуточных частей отключаем превью ссылок, чтобы избежать лишнего шума
-            parse_mode = kwargs.get('parse_mode')
-            await bot.send_message(chat_id, part, parse_mode=parse_mode, disable_web_page_preview=True)
-            await asyncio.sleep(0.5)  # Небольшая задержка между сообщениями
+    try:
+        # 1. Разделяем Markdown на безопасные для Telegram фрагменты
+        markdown_chunks = split_markdown_into_chunks(text)
+        total_parts = len(markdown_chunks)
+
+        for i, md_chunk in enumerate(markdown_chunks):
+            # 2. Конвертируем каждый фрагмент в HTML, совместимый с Telegram
+            html_chunk = telegram_format(md_chunk)
+
+            # Для последней части передаем все оригинальные kwargs (например, reply_markup)
+            if i == total_parts - 1:
+                await bot.send_message(chat_id, html_chunk, parse_mode='HTML', **kwargs)
+            else:
+                # Для промежуточных частей отключаем превью ссылок, чтобы избежать лишнего шума
+                await bot.send_message(chat_id, html_chunk, parse_mode='HTML', disable_web_page_preview=True)
+                await asyncio.sleep(0.5)  # Небольшая задержка между сообщениями
+
+    except Exception as e:
+        logger.exception(f"Ошибка при отправке длинного сообщения для user_id {chat_id}. Текст: '{text[:100]}...'", extra={'user_id': str(chat_id)})
+        # В случае сбоя при конвертации/отправке, пробуем отправить текст как есть, без форматирования
+        try:
+            # Используем старый метод простого разделения для plain text
+            plain_text = th.remove_markdown(text)
+            parts = th.split_message(plain_text) # split_message теперь не существует, используем простой сплит
+            for part in parts:
+                await bot.send_message(chat_id, part, **kwargs)
+        except Exception as fallback_e:
+            logger.error(f"Не удалось отправить сообщение даже в виде простого текста для user_id {chat_id}: {fallback_e}", extra={'user_id': str(chat_id)})
 
 
 async def send_error_reply(bot: AsyncTeleBot, message: types.Message, error_log_message: str,
@@ -69,7 +90,7 @@ async def send_error_reply(bot: AsyncTeleBot, message: types.Message, error_log_
                                   f"```\n{error_log_message}\n```\n\n"
                                   f"Сообщение пользователя: `{message.text or 'Не текстовое сообщение'}`")
             # Используем send_long_message на случай, если сообщение об ошибке будет очень длинным
-            await send_long_message(bot, ADMIN_USER_ID, admin_notification, parse_mode='Markdown')
+            await send_long_message(bot, ADMIN_USER_ID, admin_notification)
         except apihelper.ApiException as e:
             logger.error(f"Не удалось отправить уведомление об ошибке администратору: {e}", extra={'user_id': 'System'})
 
@@ -86,20 +107,23 @@ async def answer_callback_query(bot: AsyncTeleBot, call: types.CallbackQuery, te
 
 async def edit_message_text_safe(bot: AsyncTeleBot, chat_id: int, message_id: int, text: str, **kwargs):
     """
-    Редактирует текст сообщения с обработкой распространенных ошибок,
-    таких как 'message is not modified' или ошибки парсинга Markdown.
+    Редактирует текст сообщения с обработкой распространенных ошибок.
+    По умолчанию пытается использовать HTML, при ошибке - без форматирования.
     """
     try:
-        await bot.edit_message_text(text, chat_id, message_id, **kwargs)
+        # Конвертируем Markdown в HTML для безопасного редактирования
+        html_text = telegram_format(text)
+        kwargs['parse_mode'] = 'HTML'
+        await bot.edit_message_text(html_text, chat_id, message_id, **kwargs)
     except apihelper.ApiException as e:
         if "message is not modified" in str(e).lower():
             logger.debug(f"Сообщение {message_id} не было изменено (текст совпадает).", extra={'user_id': str(chat_id)})
-        elif kwargs.get('parse_mode') == 'Markdown' and "can't parse entities" in str(e).lower():
-            logger.warning(f"Ошибка парсинга Markdown при редактировании сообщения {message_id}. Повторная попытка без форматирования.", extra={'user_id': str(chat_id)})
+        else:
+            logger.warning(f"Ошибка парсинга при редактировании сообщения {message_id}. Попытка без форматирования. Ошибка: {e}", extra={'user_id': str(chat_id)})
             try:
+                # Убираем форматирование и пытаемся снова
                 kwargs['parse_mode'] = None
-                await bot.edit_message_text(text, chat_id, message_id, **kwargs)
+                plain_text = th.remove_markdown(text)
+                await bot.edit_message_text(plain_text, chat_id, message_id, **kwargs)
             except apihelper.ApiException as fallback_e:
                 logger.error(f"Не удалось отредактировать сообщение {message_id} даже без форматирования: {fallback_e}", extra={'user_id': str(chat_id)})
-        else:
-            logger.error(f"API-ошибка при редактировании сообщения {message_id}: {e}", extra={'user_id': str(chat_id)})

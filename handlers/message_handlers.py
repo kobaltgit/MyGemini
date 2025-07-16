@@ -167,7 +167,7 @@ async def handle_general_text_query(bot: AsyncTeleBot, message: types.Message):
     response = await gemini_service.generate_response(user_id, api_key, message.text)
 
     if response:
-        await tg_helpers.send_long_message(bot, user_id, response, parse_mode='Markdown')
+        await tg_helpers.send_long_message(bot, user_id, response)
     else:
         await tg_helpers.send_error_reply(
             bot, message,
@@ -199,7 +199,7 @@ async def handle_photo_message(bot: AsyncTeleBot, message: types.Message):
         response = await gemini_service.generate_response(user_id, api_key, prompt)
 
         if response:
-            await tg_helpers.send_long_message(bot, user_id, response, parse_mode='Markdown')
+            await tg_helpers.send_long_message(bot, user_id, response)
         else:
             await tg_helpers.send_error_reply(
                 bot, message,
