@@ -1,163 +1,164 @@
-# --- START OF FILE services/gemini_service.py ---
-import google.generativeai as genai
-from typing import List, Union, Dict, Optional, Tuple
-import PIL.Image # Для работы с изображениями
+import aiohttp
+import PIL.Image
+from typing import List, Union, Dict, Optional, Any
 from io import BytesIO
+import base64
 
-# Импортируем настройки и логгер
-from config.settings import GEMINI_API_KEY, GEMINI_MODEL_NAME, GENERATION_CONFIG, SAFETY_SETTINGS
+from config.settings import GEMINI_MODEL_NAME, GENERATION_CONFIG, SAFETY_SETTINGS
 from logger_config import get_logger
-from database import db_manager # Для сохранения истории
+from database import db_manager
 
 gemini_logger = get_logger('gemini_api')
 
-# --- Инициализация модели ---
-try:
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        model_name=GEMINI_MODEL_NAME,
-        generation_config=GENERATION_CONFIG,
-        safety_settings=SAFETY_SETTINGS
-    )
-    gemini_logger.info(f"Модель Gemini '{GEMINI_MODEL_NAME}' успешно инициализирована.", extra={'user_id': 'System'})
-except Exception as e:
-    gemini_logger.exception(f"Критическая ошибка: Не удалось инициализировать модель Gemini: {e}", extra={'user_id': 'System'})
-    # В реальном приложении здесь может быть логика аварийного завершения или оповещения
-    raise  # Поднимаем исключение, чтобы бот не запустился без модели
+# Словарь для хранения истории чатов в памяти
+user_chats: Dict[int, List[Dict[str, Any]]] = {}
 
-# Словарь для хранения активных чатов (контекста) пользователей
-# Ключ - user_id, значение - объект ChatSession
-user_chats: Dict[int, genai.ChatSession] = {}
+# Базовый URL для Gemini API v1beta
+GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
-def _get_user_chat(user_id: int, reload_history: bool = False) -> genai.ChatSession:
+
+async def _make_gemini_request_async(api_key: str, model_name: str, contents: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
-    Возвращает или создает сессию чата для пользователя.
-    При reload_history=True загружает историю из БД.
+    Выполняет асинхронный HTTP-запрос к Gemini API.
+    """
+    url = f"{GEMINI_API_BASE_URL}/{model_name}:generateContent?key={api_key}"
+
+    payload = {
+        "contents": contents,
+        "generationConfig": GENERATION_CONFIG,
+        "safetySettings": SAFETY_SETTINGS
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as response:
+                response_json = await response.json()
+                if response.status != 200:
+                    error_details = response_json.get('error', {})
+                    gemini_logger.error(
+                        f"Ошибка API Gemini (HTTP {response.status}): {error_details.get('message', 'Нет деталей')}",
+                        extra={'user_id': 'System'}
+                    )
+                    return None
+                return response_json
+    except aiohttp.ClientError as e:
+        gemini_logger.exception(f"Сетевая ошибка при запросе к Gemini API: {e}", extra={'user_id': 'System'})
+        return None
+    except Exception as e:
+        gemini_logger.exception(f"Неожиданная ошибка при выполнении запроса к Gemini API: {e}", extra={'user_id': 'System'})
+        return None
+
+def _get_user_chat_history(user_id: int) -> List[Dict[str, Any]]:
+    """
+    Возвращает или создает историю чата для пользователя из кэша или БД.
     """
     global user_chats
-    if user_id not in user_chats or reload_history:
-        gemini_logger.debug(f"Создание/перезагрузка сессии чата для user_id: {user_id}", extra={'user_id': user_id})
-        history_from_db = db_manager.get_conversation_history(user_id, limit=20) # Загружаем последние N сообщений
-        # Преобразуем историю в формат, понятный Gemini
-        gemini_history = []
-        for role, text in history_from_db:
-             # Gemini ожидает 'user' и 'model'
-             gemini_role = 'user' if role == 'user' else 'model'
-             gemini_history.append({'role': gemini_role, 'parts': [{'text': text}]})
+    if user_id not in user_chats:
+        gemini_logger.debug(f"Кэш истории для user_id: {user_id} не найден. Загрузка из БД.", extra={'user_id': str(user_id)})
+        history_from_db = db_manager.get_conversation_history(user_id, limit=20)
 
-        user_chats[user_id] = model.start_chat(history=gemini_history)
-        gemini_logger.info(f"Сессия чата для user_id: {user_id} создана/перезагружена. Загружено {len(gemini_history)} сообщений.", extra={'user_id': user_id})
+        # Конвертируем формат из БД в формат Gemini API
+        gemini_history = []
+        for item in history_from_db:
+            role = 'user' if item.get('role') == 'user' else 'model'
+            gemini_history.append({"role": role, "parts": [{"text": item.get('message_text', '')}]})
+
+        user_chats[user_id] = gemini_history
+        gemini_logger.info(f"История для user_id: {user_id} загружена в кэш ({len(gemini_history)} сообщений).", extra={'user_id': str(user_id)})
+
     return user_chats[user_id]
 
 def reset_user_chat(user_id: int):
-    """Сбрасывает историю чата для пользователя."""
+    """Сбрасывает историю чата для пользователя в кэше."""
     global user_chats
     if user_id in user_chats:
         del user_chats[user_id]
-        gemini_logger.info(f"История чата для user_id: {user_id} сброшена.", extra={'user_id': user_id})
-        # Опционально: можно также очистить историю в БД или пометить как сброшенную
-    else:
-        gemini_logger.debug(f"Попытка сброса несуществующей сессии чата для user_id: {user_id}", extra={'user_id': user_id})
+        gemini_logger.info(f"История чата в кэше для user_id: {user_id} сброшена.", extra={'user_id': str(user_id)})
 
-def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL.Image.Image]]], store_in_db: bool = True) -> Optional[str]:
+async def generate_response(user_id: int, api_key: str, prompt: Union[str, List[Union[str, PIL.Image.Image]]], store_in_db: bool = True) -> Optional[str]:
     """
-    Генерирует ответ от Gemini, обрабатывает историю и ошибки.
-
-    Args:
-        user_id: ID пользователя Telegram.
-        prompt: Текст запроса или список [текст, изображение].
-        store_in_db: Сохранять ли запрос и ответ в БД.
-
-    Returns:
-        Текстовый ответ от модели или None в случае ошибки.
+    Генерирует ответ от Gemini, используя прямой HTTP-запрос.
     """
-    chat = _get_user_chat(user_id)
-    prompt_for_log = prompt if isinstance(prompt, str) else "[Image + Text]" if isinstance(prompt, list) else "[Unknown Prompt Type]"
+    history = _get_user_chat_history(user_id)
 
-    try:
-        gemini_logger.debug(f"Отправка запроса к Gemini для user_id: {user_id}. Prompt: '{prompt_for_log[:100]}...'", extra={'user_id': user_id})
+    # Формируем 'contents' для запроса
+    request_contents = list(history) # Копируем историю
+    user_message_for_db = ""
 
-        # --- Обработка разных типов prompt ---
-        gemini_prompt_parts = []
-        user_message_for_db = ""
+    # Обрабатываем промпт пользователя
+    user_parts = []
+    if isinstance(prompt, str):
+        user_parts.append({"text": prompt})
+        user_message_for_db = prompt
+    elif isinstance(prompt, list):
+        text_part = ""
+        for item in prompt:
+            if isinstance(item, str):
+                text_part = item
+            elif isinstance(item, PIL.Image.Image):
+                # Конвертируем изображение в base64
+                buffered = BytesIO()
+                item.save(buffered, format="JPEG")
+                img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
+                user_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_str}})
+        user_parts.append({"text": text_part})
+        user_message_for_db = f"[Изображение] {text_part}".strip()
 
-        if isinstance(prompt, str):
-            plain_text_instruction = "Пожалуйста, предоставь ответ в формате plain text, без какого-либо Markdown форматирования."
-            gemini_prompt_parts.append(prompt + "\n\n" + plain_text_instruction) # Добавляем инструкцию к промпту
-            user_message_for_db = prompt
-        elif isinstance(prompt, list):
-            # Предполагаем формат [text, image] или [image, text] или [image]
-            img = None
-            txt = ""
-            for item in prompt:
-                if isinstance(item, PIL.Image.Image):
-                    img = item
-                    gemini_prompt_parts.append(img) # Добавляем изображение
-                elif isinstance(item, str):
-                    txt = item
-                    if not img and not txt:
-                       gemini_logger.error(f"Некорректный prompt для user_id {user_id}: в списке нет ни текста, ни изображения", extra={'user_id': user_id})
-                       return None
+    request_contents.append({"role": "user", "parts": user_parts})
 
-                    gemini_prompt_parts.append(txt) # Добавляем текст
-            user_message_for_db = f"[Изображение] {txt}".strip() if img else txt # Формируем сообщение для БД
-        else:
-             gemini_logger.error(f"Неподдерживаемый тип prompt для user_id {user_id}: {type(prompt)}", extra={'user_id': user_id})
-             return None
+    # Сохраняем сообщение пользователя в БД
+    if store_in_db and user_message_for_db:
+        db_manager.store_message(user_id, 'user', user_message_for_db)
 
-        # Сохраняем сообщение пользователя перед отправкой запроса
-        if store_in_db and user_message_for_db: # Проверяем, что есть что сохранять
-             db_manager.store_message(user_id, 'user', user_message_for_db)
+    # Делаем запрос к API
+    response_json = await _make_gemini_request_async(api_key, GEMINI_MODEL_NAME, request_contents)
 
-        # Отправляем запрос в Gemini
-        response = chat.send_message(gemini_prompt_parts) # Отправляем подготовленные части
-
-        # Обработка ответа
-        if response and response.text:
-            response_text = response.text.strip()
-            gemini_logger.debug(f"Получен ответ от Gemini для user_id: {user_id}. Response: '{response_text[:100]}...'", extra={'user_id': user_id})
-            # Сохраняем ответ бота в БД
-            if store_in_db:
-                db_manager.store_message(user_id, 'bot', response_text)
-            return response_text
-        else:
-            # Обработка случаев, когда ответ пустой или заблокирован
-            block_reason = response.prompt_feedback.block_reason if response.prompt_feedback is not None else "Неизвестно (возможно, пустой ответ)"
-            safety_ratings = response.prompt_feedback.safety_ratings if response.prompt_feedback is not None else "Нет данных"
-            gemini_logger.warning(f"Получен пустой или заблокированный ответ от Gemini для user_id: {user_id}. Причина: {block_reason}. Рейтинги: {safety_ratings}", extra={'user_id': user_id})
-            # Можно вернуть кастомное сообщение об ошибке или None
-            # return f"Извините, я не могу ответить на этот запрос. Причина: {block_reason}."
-            return None # Возвращаем None, чтобы обработчик в боте мог выдать стандартную ошибку
-
-    except Exception as e:
-        gemini_logger.exception(f"Ошибка при взаимодействии с Gemini API для user_id: {user_id}: {e}", extra={'user_id': user_id})
-        return None # Возвращаем None при любой ошибке
-
-# Дополнительные функции сервиса Gemini (если нужны):
-# - Функция для генерации контента без сохранения истории (для специфичных задач)
-# - Функция для анализа изображений без текстового запроса и т.д.
-
-def generate_content_simple(prompt: Union[str, List[Union[str, PIL.Image.Image]]]) -> Optional[str]:
-    """
-    Генерирует ответ от Gemini без использования истории чата.
-    Подходит для одноразовых запросов (например, анализ тем).
-    """
-    try:
-        gemini_logger.debug(f"Отправка одноразового запроса к Gemini. Prompt: '{str(prompt)[:100]}...'", extra={'user_id': 'System'})
-        response = model.generate_content(prompt) # Используем generate_content вместо chat.send_message
-
-        if response and response.text:
-            response_text = response.text.strip()
-            gemini_logger.debug(f"Получен ответ на одноразовый запрос: '{response_text[:100]}...'", extra={'user_id': 'System'})
-            return response_text
-        else:
-            block_reason = response.prompt_feedback.block_reason if response.prompt_feedback is not None else "Неизвестно (пустой ответ)"
-            safety_ratings = response.prompt_feedback.safety_ratings if response.prompt_feedback is not None else "Нет данных"
-            gemini_logger.warning(f"Получен пустой или заблокированный ответ на одноразовый запрос. Причина: {block_reason}. Рейтинги: {safety_ratings}", extra={'user_id': 'System'})
-            return None
-
-    except Exception as e:
-        gemini_logger.exception(f"Ошибка при выполнении одноразового запроса к Gemini: {e}", extra={'user_id': 'System'})
+    if not response_json or "candidates" not in response_json:
+        # Если ответ неудачный, удаляем последнее сообщение пользователя из истории в кэше
+        if history:
+            history.pop()
         return None
 
-# --- END OF FILE services/gemini_service.py ---
+    try:
+        response_text = response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+        # Обновляем историю в кэше
+        history.append({"role": "user", "parts": user_parts})
+        history.append({"role": "model", "parts": [{"text": response_text}]})
+
+        # Сохраняем ответ бота в БД
+        if store_in_db:
+            db_manager.store_message(user_id, 'bot', response_text)
+
+        return response_text
+    except (KeyError, IndexError) as e:
+        gemini_logger.error(f"Ошибка парсинга ответа от Gemini: {e}. Ответ: {response_json}", extra={'user_id': str(user_id)})
+        return None
+
+async def generate_content_simple(api_key: str, prompt: str) -> Optional[str]:
+    """
+    Генерирует ответ от Gemini без использования истории чата.
+    """
+    contents = [{"role": "user", "parts": [{"text": prompt}]}]
+    response_json = await _make_gemini_request_async(api_key, GEMINI_MODEL_NAME, contents)
+
+    if not response_json or "candidates" not in response_json:
+        return None
+    try:
+        return response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except (KeyError, IndexError):
+        return None
+
+async def validate_api_key(api_key: str) -> bool:
+    """
+    Проверяет валидность API-ключа, делая дешевый запрос (countTokens).
+    """
+    url = f"{GEMINI_API_BASE_URL}/{GEMINI_MODEL_NAME}:countTokens?key={api_key}"
+    payload = {"contents": [{"parts": [{"text": "hello"}]}]}
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as response:
+                return response.status == 200
+    except Exception:
+        return False
