@@ -58,8 +58,7 @@ BOT_STYLES = {
     'detailed': '🔍 Подробный / Detailed'
 }
 
-# ИЗМЕНЕНО: --- Bot Personas (с локализацией) ---
-# 'name' будет извлекаться по языку, 'prompt' тоже.
+# --- Bot Personas (с локализацией) ---
 BOT_PERSONAS = {
     "default": {
         "name_ru": "🤖 Обычный ассистент",
@@ -112,8 +111,8 @@ BOT_PERSONAS = {
     "travel_planner": {
         "name_ru": "✈️ Планировщик путешествий",
         "name_en": "✈️ Travel Planner",
-        "prompt_en": "You are an experienced travel planner. Your task is to help the user create the perfect itinerary. Suggest not only popular attractions but also hidden gems. Provide practical advice on logistics (transport, accommodation, best time to visit) and help create a balanced plan for each day of the trip.",
-        "prompt_ru": "Ты — опытный планировщик путешествий. Твоя задача — помочь пользователю составить идеальный маршрут. Предлагай не только популярные достопримечательности, но и скрытые жемчужины. Давай практические советы по логистике (транспорт, проживание, лучшее время для посещения) и помогай составить сбалансированный план на каждый день поездки."
+        "prompt_ru": "Ты — опытный планировщик путешествий. Твоя задача — помочь пользователю составить идеальный маршрут. Предлагай не только популярные достопримечательности, но и скрытые жемчужины. Давай практические советы по логистике (транспорт, проживание, лучшее время для посещения) и помогай составить сбалансированный план на каждый день поездки.",
+        "prompt_en": "You are an experienced travel planner. Your task is to help the user create the perfect itinerary. Suggest not only popular attractions but also hidden gems. Provide practical advice on logistics (transport, accommodation, best time to visit) and help create a balanced plan for each day of the trip."
     },
     "translator": {
         "name_ru": "💬 Лингвист-переводчик",
@@ -140,7 +139,6 @@ CALLBACK_SETTINGS_SET_API_KEY = 'settings_set_api_key'
 CALLBACK_SETTINGS_CHOOSE_MODEL_MENU = 'settings_choose_model_menu'
 CALLBACK_SETTINGS_MODEL_PREFIX = 'settings_model:'
 CALLBACK_SETTINGS_BACK_TO_MAIN = 'settings_back_to_main'
-# НОВЫЕ ПРЕФИКСЫ ДЛЯ ПЕРСОН
 CALLBACK_SETTINGS_PERSONA_MENU = 'settings_persona_menu'
 CALLBACK_SETTINGS_PERSONA_PREFIX = 'settings_persona:'
 # Language (for translation)
@@ -148,10 +146,22 @@ CALLBACK_LANG_PREFIX = 'lang:'
 # Calendar (for history)
 CALLBACK_CALENDAR_DATE_PREFIX = 'calendar_date:'
 CALLBACK_CALENDAR_MONTH_PREFIX = 'calendar_month:'
+# НОВЫЕ ПРЕФИКСЫ ДЛЯ ДИАЛОГОВ
+CALLBACK_DIALOGS_MENU = 'dialogs_menu'
+CALLBACK_DIALOG_SWITCH_PREFIX = 'dialog_switch:'
+CALLBACK_DIALOG_RENAME_PREFIX = 'dialog_rename:'
+CALLBACK_DIALOG_DELETE_PREFIX = 'dialog_delete:'
+CALLBACK_DIALOG_CONFIRM_DELETE_PREFIX = 'dialog_confirm_delete:'
+CALLBACK_DIALOG_CREATE = 'dialog_create'
+
 
 # --- User States ---
 STATE_WAITING_FOR_TRANSLATE_TEXT = 'waiting_for_translate_text'
 STATE_WAITING_FOR_HISTORY_DATE = 'waiting_for_history_date'
 STATE_WAITING_FOR_API_KEY = 'waiting_for_api_key'
+# НОВЫЕ СОСТОЯНИЯ ДЛЯ ДИАЛОГОВ
+STATE_WAITING_FOR_NEW_DIALOG_NAME = 'waiting_for_new_dialog_name'
+STATE_WAITING_FOR_RENAME_DIALOG = 'waiting_for_rename_dialog'
+
 
 print(f"Конфигурация MyGemini/settings.py загружена. Модель Gemini: {GEMINI_MODEL_NAME}")

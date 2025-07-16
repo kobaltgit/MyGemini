@@ -66,27 +66,13 @@ def _execute_query(query: str, params: tuple = (), fetch_one: bool = False, fetc
     return result
 
 def setup_database():
-    """Инициализирует структуру базы данных, если она не существует."""
-    # ИЗМЕНЕНО: Добавлено поле active_persona
-    required_user_columns = {
-        'user_id', 'bot_style', 'first_interaction_date',
-        'api_key', 'language_code', 'gemini_model', 'active_persona'
-    }
-    required_conversation_columns = {
-        'conversation_id', 'user_id', 'timestamp', 'role', 'message_text',
-        'prompt_tokens', 'completion_tokens', 'total_tokens'
-    }
-
-    conn = None
+    """Инициализирует и мигрирует структуру базы данных."""
+    conn = _get_db_connection()
+    cursor = conn.cursor()
     try:
-        conn = _get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tables = cursor.fetchall()
-        existing_tables = {table['name'] for table in tables}
-        db_logger.info(f"Существующие таблицы: {existing_tables}")
-
-        if 'users' not in existing_tables:
+        cursor.execute("PRAGMA table_info(users)")
+        user_columns = {col['name'] for col in cursor.fetchall()}
+        if not user_columns:
             db_logger.info("Таблица 'users' не найдена, создаем...")
             cursor.execute("""
             CREATE TABLE users (
@@ -96,121 +82,227 @@ def setup_database():
                 api_key TEXT DEFAULT NULL,
                 language_code TEXT DEFAULT 'ru' NOT NULL,
                 gemini_model TEXT DEFAULT NULL,
-                active_persona TEXT DEFAULT 'default' NOT NULL
-            )
-            """)
-            db_logger.info("Таблица 'users' успешно создана.")
+                active_persona TEXT DEFAULT 'default' NOT NULL,
+                active_dialog_id INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL
+            )""")
         else:
-            cursor.execute("PRAGMA table_info(users)")
-            current_columns = {col['name'] for col in cursor.fetchall()}
-            missing_columns = required_user_columns - current_columns
-            for col in missing_columns:
-                db_logger.info(f"Добавляем отсутствующий столбец '{col}' в таблицу 'users'...")
-                col_type = 'TEXT'
-                default_val_str = 'DEFAULT NULL'
-                not_null_str = ''
-
-                if col == 'bot_style':
-                    default_val_str = "DEFAULT 'default'"
-                    not_null_str = 'NOT NULL'
-                elif col == 'language_code':
-                    default_val_str = "DEFAULT 'ru'"
-                    not_null_str = 'NOT NULL'
-                # НОВОЕ: Правило для нового поля
-                elif col == 'active_persona':
-                    default_val_str = "DEFAULT 'default'"
-                    not_null_str = 'NOT NULL'
-
-                try:
-                    add_col_query = f"ALTER TABLE users ADD COLUMN {col} {col_type} {not_null_str} {default_val_str}"
-                    cursor.execute(add_col_query)
-                    db_logger.info(f"Столбец '{col}' успешно добавлен в 'users'.")
-                except sqlite3.OperationalError as alter_err:
-                    db_logger.warning(f"Не удалось добавить столбец {col} в users: {alter_err}")
-
-        if 'reminders' in existing_tables:
-            db_logger.info("Таблица 'reminders' больше не используется, удаляем...")
-            cursor.execute("DROP TABLE reminders")
-            db_logger.info("Таблица 'reminders' успешно удалена.")
-
-        if 'conversations' not in existing_tables:
-            db_logger.info("Таблица 'conversations' не найдена, создаем...")
+            required_user_columns = {'active_dialog_id', 'active_persona'}
+            missing_user_columns = required_user_columns - user_columns
+            for col in missing_user_columns:
+                db_logger.info(f"Добавляем отсутствующий столбец '{col}' в 'users'...")
+                if col == 'active_persona':
+                    cursor.execute("ALTER TABLE users ADD COLUMN active_persona TEXT DEFAULT 'default' NOT NULL")
+                elif col == 'active_dialog_id':
+                    cursor.execute("ALTER TABLE users ADD COLUMN active_dialog_id INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL")
+        cursor.execute("PRAGMA table_info(dialogs)")
+        if not cursor.fetchall():
+            db_logger.info("Таблица 'dialogs' не найдена, создаем...")
             cursor.execute("""
+            CREATE TABLE dialogs (
+                dialog_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            )""")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_dialogs_user ON dialogs (user_id)")
+        cursor.execute("PRAGMA table_info(conversations)")
+        conversation_columns = {col['name'] for col in cursor.fetchall()}
+        if not conversation_columns:
+             db_logger.info("Таблица 'conversations' не найдена, создаем...")
+             cursor.execute("""
                 CREATE TABLE conversations (
                     conversation_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     timestamp TEXT NOT NULL,
-                    role TEXT NOT NULL CHECK(role IN ('user', 'bot', 'system')),
+                    role TEXT NOT NULL CHECK(role IN ('user', 'bot')),
                     message_text TEXT,
                     prompt_tokens INTEGER NOT NULL DEFAULT 0,
                     completion_tokens INTEGER NOT NULL DEFAULT 0,
                     total_tokens INTEGER NOT NULL DEFAULT 0,
-                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-                )
-            """)
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_user_time ON conversations (user_id, timestamp)")
-            db_logger.info("Таблица 'conversations' и индекс успешно созданы.")
+                    dialog_id INTEGER NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                    FOREIGN KEY (dialog_id) REFERENCES dialogs(dialog_id) ON DELETE CASCADE
+                )""")
+             cursor.execute("CREATE INDEX IF NOT EXISTS idx_conversations_dialog_time ON conversations (dialog_id, timestamp)")
         else:
-            cursor.execute("PRAGMA table_info(conversations)")
-            current_columns = {col['name'] for col in cursor.fetchall()}
-            missing_columns = required_conversation_columns - current_columns
-            for col in missing_columns:
-                if col in ['prompt_tokens', 'completion_tokens', 'total_tokens']:
-                    db_logger.info(f"Добавляем отсутствующий столбец '{col}' в таблицу 'conversations'...")
-                    try:
-                        add_col_query = f"ALTER TABLE conversations ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0"
-                        cursor.execute(add_col_query)
-                        db_logger.info(f"Столбец '{col}' успешно добавлен в 'conversations'.")
-                    except sqlite3.OperationalError as alter_err:
-                        db_logger.warning(f"Не удалось добавить столбец {col} в conversations: {alter_err}")
-
+            if 'dialog_id' not in conversation_columns:
+                db_logger.info("Добавляем отсутствующий столбец 'dialog_id' в 'conversations'...")
+                cursor.execute("ALTER TABLE conversations ADD COLUMN dialog_id INTEGER REFERENCES dialogs(dialog_id) ON DELETE CASCADE")
+        conn.commit()
+        cursor.execute("SELECT user_id FROM users WHERE active_dialog_id IS NULL")
+        users_to_migrate = cursor.fetchall()
+        if users_to_migrate:
+            db_logger.info(f"Найдено {len(users_to_migrate)} пользователей для миграции на систему диалогов...")
+            for row in users_to_migrate:
+                user_id = row['user_id']
+                default_dialog_name = "Основной диалог"
+                now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                cursor.execute("INSERT INTO dialogs (user_id, name, created_at) VALUES (?, ?, ?)",
+                               (user_id, default_dialog_name, now_str))
+                new_dialog_id = cursor.lastrowid
+                cursor.execute("UPDATE users SET active_dialog_id = ? WHERE user_id = ?", (new_dialog_id, user_id))
+                cursor.execute("UPDATE conversations SET dialog_id = ? WHERE user_id = ? AND dialog_id IS NULL", (new_dialog_id, user_id))
+                db_logger.info(f"Пользователь {user_id} успешно мигрирован. Создан диалог ID: {new_dialog_id}.")
+            cursor.execute("PRAGMA foreign_keys=off")
+            cursor.execute("BEGIN TRANSACTION")
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS conversations_new (
+                    conversation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    timestamp TEXT NOT NULL,
+                    role TEXT NOT NULL CHECK(role IN ('user', 'bot')),
+                    message_text TEXT,
+                    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+                    completion_tokens INTEGER NOT NULL DEFAULT 0,
+                    total_tokens INTEGER NOT NULL DEFAULT 0,
+                    dialog_id INTEGER NOT NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                    FOREIGN KEY (dialog_id) REFERENCES dialogs(dialog_id) ON DELETE CASCADE
+                )""")
+            cursor.execute("INSERT INTO conversations_new SELECT * FROM conversations")
+            cursor.execute("DROP TABLE conversations")
+            cursor.execute("ALTER TABLE conversations_new RENAME TO conversations")
+            cursor.execute("COMMIT")
+            cursor.execute("PRAGMA foreign_keys=on")
+            db_logger.info("Столбец 'dialog_id' в таблице 'conversations' сделан NOT NULL.")
         conn.commit()
         db_logger.info("Проверка и настройка базы данных завершена.")
-    except sqlite3.Error as e:
-        db_logger.exception(f"Ошибка при настройке базы данных: {e}")
-        if conn:
-            try: conn.rollback()
-            except sqlite3.Error as rb_err: db_logger.error(f"Ошибка при откате транзакции: {rb_err}")
+    except Exception as e:
+        db_logger.exception(f"Критическая ошибка при настройке/миграции базы данных: {e}")
+        if conn: conn.rollback()
     finally:
         if conn: conn.close()
 
-def add_or_update_user(user_id: int, bot_style: str = 'default'):
-    """Добавляет нового пользователя или обновляет его данные."""
-    query_select = "SELECT user_id, first_interaction_date FROM users WHERE user_id = ?"
-    user_data = _execute_query(query_select, (user_id,), fetch_one=True)
-    today_date_str = datetime.date.today().strftime('%Y-%m-%d')
-
-    if user_data:
-        if not user_data['first_interaction_date']:
-            query_update = "UPDATE users SET first_interaction_date = ? WHERE user_id = ?"
-            _execute_query(query_update, (today_date_str, user_id), is_write_operation=True)
+def add_or_update_user(user_id: int):
+    """Добавляет нового пользователя или обновляет его данные, включая создание диалога по умолчанию."""
+    user_data = _execute_query("SELECT user_id, active_dialog_id FROM users WHERE user_id = ?", (user_id,), fetch_one=True)
+    if not user_data:
+        db_logger.info(f"Добавляем нового пользователя {user_id}.")
+        today_date_str = datetime.date.today().strftime('%Y-%m-%d')
+        query_insert_user = "INSERT INTO users (user_id, first_interaction_date) VALUES (?, ?)"
+        _execute_query(query_insert_user, (user_id, today_date_str), is_write_operation=True)
+        create_dialog(user_id, "Основной диалог", set_active=True)
     else:
-        db_logger.info(f"Добавляем нового пользователя {user_id}.", extra={'user_id': str(user_id)})
-        query_insert = "INSERT INTO users (user_id, bot_style, first_interaction_date) VALUES (?, ?, ?)"
-        _execute_query(query_insert, (user_id, bot_style, today_date_str), is_write_operation=True)
+        if not user_data['active_dialog_id']:
+            db_logger.warning(f"У существующего пользователя {user_id} нет активного диалога. Создаем новый.")
+            create_dialog(user_id, "Основной диалог", set_active=True)
 
-# --- Функции для работы с пользователями (users) ---
+def create_dialog(user_id: int, name: str, set_active: bool = False) -> int:
+    """Создает новый диалог для пользователя и опционально делает его активным."""
+    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    query = "INSERT INTO dialogs (user_id, name, created_at) VALUES (?, ?, ?)"
+    new_dialog_id = _execute_query(query, (user_id, name, now_str), is_write_operation=True)
+    if set_active and new_dialog_id:
+        set_active_dialog(user_id, new_dialog_id)
+    db_logger.info(f"Для пользователя {user_id} создан новый диалог '{name}' (ID: {new_dialog_id}).")
+    return new_dialog_id
 
-def get_user_bot_style(user_id: int) -> str:
-    query = "SELECT bot_style FROM users WHERE user_id = ?"
+def get_user_dialogs(user_id: int) -> List[Dict[str, Any]]:
+    """Получает список всех диалогов пользователя."""
+    query = "SELECT d.dialog_id, d.name, u.active_dialog_id FROM dialogs d JOIN users u ON d.user_id = u.user_id WHERE d.user_id = ? ORDER BY d.created_at DESC"
+    rows = _execute_query(query, (user_id,), fetch_all=True)
+    return [dict(row) for row in rows] if rows else []
+
+def set_active_dialog(user_id: int, dialog_id: int):
+    """Устанавливает активный диалог для пользователя."""
+    query = "UPDATE users SET active_dialog_id = ? WHERE user_id = ?"
+    _execute_query(query, (dialog_id, user_id), is_write_operation=True)
+    db_logger.info(f"Для пользователя {user_id} установлен активный диалог ID: {dialog_id}.")
+
+def rename_dialog(dialog_id: int, new_name: str):
+    """Переименовывает диалог."""
+    query = "UPDATE dialogs SET name = ? WHERE dialog_id = ?"
+    _execute_query(query, (new_name, dialog_id), is_write_operation=True)
+    db_logger.info(f"Диалог ID {dialog_id} переименован в '{new_name}'.")
+
+def delete_dialog(dialog_id: int) -> Optional[str]:
+    """Удаляет диалог и его историю. Возвращает имя удаленного диалога."""
+    dialog_info = _execute_query("SELECT name FROM dialogs WHERE dialog_id = ?", (dialog_id,), fetch_one=True)
+    if not dialog_info:
+        return None
+
+    query = "DELETE FROM dialogs WHERE dialog_id = ?"
+    _execute_query(query, (dialog_id,), is_write_operation=True)
+    db_logger.info(f"Диалог ID {dialog_id} и связанные сообщения удалены.")
+    return dialog_info['name']
+
+def get_active_dialog_id(user_id: int) -> Optional[int]:
+    """Получает ID активного диалога пользователя."""
+    query = "SELECT active_dialog_id FROM users WHERE user_id = ?"
     result = _execute_query(query, (user_id,), fetch_one=True)
-    return result['bot_style'] if result and result['bot_style'] else 'default'
+    return result['active_dialog_id'] if result else None
+
+def get_user_context_info(user_id: int) -> Optional[Dict[str, Any]]:
+    """Получает единым запросом всю информацию для контекстного заголовка."""
+    query = """
+        SELECT
+            d.name as dialog_name,
+            u.gemini_model,
+            u.active_persona
+        FROM users u
+        LEFT JOIN dialogs d ON u.active_dialog_id = d.dialog_id
+        WHERE u.user_id = ?
+    """
+    result = _execute_query(query, (user_id,), fetch_one=True)
+    return dict(result) if result else None
+
+def store_message(user_id: int, dialog_id: int, role: str, message_text: str,
+                  prompt_tokens: int = 0, completion_tokens: int = 0, total_tokens: int = 0):
+    """Сохраняет сообщение в базу данных с привязкой к диалогу."""
+    if role not in ('user', 'bot'): return
+    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    query = """
+        INSERT INTO conversations 
+        (user_id, dialog_id, timestamp, role, message_text, prompt_tokens, completion_tokens, total_tokens) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    params = (user_id, dialog_id, timestamp, role, message_text, prompt_tokens, completion_tokens, total_tokens)
+    _execute_query(query, params, is_write_operation=True)
+
+def get_conversation_history(dialog_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+    """Получает историю сообщений для конкретного диалога."""
+    query = "SELECT role, message_text FROM conversations WHERE dialog_id = ? ORDER BY conversation_id DESC LIMIT ?"
+    rows = _execute_query(query, (dialog_id,), fetch_all=True)
+    return [dict(row) for row in reversed(rows)] if rows else []
+
+def get_conversation_history_by_date(dialog_id: int, history_date: datetime.date) -> List[Dict[str, Any]]:
+    """Получает историю сообщений для конкретного диалога за определенную дату."""
+    start_dt = datetime.datetime.combine(history_date, datetime.time.min, tzinfo=datetime.timezone.utc)
+    end_dt = datetime.datetime.combine(history_date, datetime.time.max, tzinfo=datetime.timezone.utc)
+    query = "SELECT role, message_text FROM conversations WHERE dialog_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp ASC"
+    rows = _execute_query(query, (dialog_id, start_dt.isoformat(), end_dt.isoformat()), fetch_all=True)
+    return [dict(row) for row in rows] if rows else []
+
+# ИЗМЕНЕНО: Эта функция теперь считает сообщения в одном диалоге
+def get_conversation_count(dialog_id: int) -> int:
+    """Получает количество сообщений в конкретном диалоге."""
+    query = "SELECT COUNT(*) FROM conversations WHERE dialog_id = ?"
+    count = _execute_query(query, (dialog_id,))
+    return count if count is not None else 0
+
+# НОВАЯ ФУНКЦИЯ
+def get_total_user_message_count(user_id: int) -> int:
+    """Получает общее количество сообщений пользователя во всех его диалогах."""
+    query = "SELECT COUNT(*) FROM conversations WHERE user_id = ?"
+    count = _execute_query(query, (user_id,))
+    return count if count is not None else 0
 
 def set_user_bot_style(user_id: int, style: str):
     add_or_update_user(user_id)
     query = "UPDATE users SET bot_style = ? WHERE user_id = ?"
     _execute_query(query, (style, user_id), is_write_operation=True)
-    db_logger.info(f"Стиль бота для {user_id} изменен на '{style}'.", extra={'user_id': str(user_id)})
+
+def get_user_bot_style(user_id: int) -> str:
+    query = "SELECT bot_style FROM users WHERE user_id = ?"
+    result = _execute_query(query, (user_id,), fetch_one=True)
+    return result['bot_style'] if result else 'default'
 
 def set_user_api_key(user_id: int, api_key: str):
     add_or_update_user(user_id)
-    try:
-        encrypted_key = crypto_helpers.encrypt_data(api_key)
-        query = "UPDATE users SET api_key = ? WHERE user_id = ?"
-        _execute_query(query, (encrypted_key, user_id), is_write_operation=True)
-        db_logger.info(f"API-ключ для пользователя {user_id} был зашифрован и сохранен.", extra={'user_id': str(user_id)})
-    except Exception as e:
-        db_logger.exception(f"Ошибка при шифровании и сохранении API-ключа для {user_id}: {e}", extra={'user_id': str(user_id)})
+    encrypted_key = crypto_helpers.encrypt_data(api_key)
+    query = "UPDATE users SET api_key = ? WHERE user_id = ?"
+    _execute_query(query, (encrypted_key, user_id), is_write_operation=True)
 
 def get_user_api_key(user_id: int) -> Optional[str]:
     query = "SELECT api_key FROM users WHERE user_id = ?"
@@ -218,12 +310,7 @@ def get_user_api_key(user_id: int) -> Optional[str]:
     if result and result['api_key']:
         encrypted_key = result['api_key']
         try:
-            decrypted_key = crypto_helpers.decrypt_data(encrypted_key)
-            if decrypted_key:
-                return decrypted_key
-            else:
-                db_logger.error(f"Не удалось дешифровать API-ключ для {user_id}. Возможно, ключ шифрования изменился.", extra={'user_id': str(user_id)})
-                return None
+            return crypto_helpers.decrypt_data(encrypted_key)
         except Exception as e:
             db_logger.exception(f"Ошибка при дешифровании API-ключа для {user_id}: {e}", extra={'user_id': str(user_id)})
             return None
@@ -233,7 +320,6 @@ def set_user_language(user_id: int, lang_code: str):
     add_or_update_user(user_id)
     query = "UPDATE users SET language_code = ? WHERE user_id = ?"
     _execute_query(query, (lang_code, user_id), is_write_operation=True)
-    db_logger.info(f"Язык для {user_id} изменен на '{lang_code}'.", extra={'user_id': str(user_id)})
 
 def get_user_language(user_id: int) -> str:
     query = "SELECT language_code FROM users WHERE user_id = ?"
@@ -241,64 +327,24 @@ def get_user_language(user_id: int) -> str:
     return result['language_code'] if result and result['language_code'] else 'ru'
 
 def set_user_gemini_model(user_id: int, model_name: str):
-    """Устанавливает выбранную модель Gemini для пользователя."""
     add_or_update_user(user_id)
     query = "UPDATE users SET gemini_model = ? WHERE user_id = ?"
     _execute_query(query, (model_name, user_id), is_write_operation=True)
-    db_logger.info(f"Модель Gemini для {user_id} изменена на '{model_name}'.", extra={'user_id': str(user_id)})
 
 def get_user_gemini_model(user_id: int) -> Optional[str]:
-    """Получает модель Gemini, выбранную пользователем."""
     query = "SELECT gemini_model FROM users WHERE user_id = ?"
     result = _execute_query(query, (user_id,), fetch_one=True)
     return result['gemini_model'] if result and result['gemini_model'] else None
 
-# --- НОВЫЕ ФУНКЦИИ ДЛЯ УПРАВЛЕНИЯ ПЕРСОНОЙ ---
 def set_user_persona(user_id: int, persona_id: str):
-    """Устанавливает активную персону для пользователя."""
     add_or_update_user(user_id)
     query = "UPDATE users SET active_persona = ? WHERE user_id = ?"
     _execute_query(query, (persona_id, user_id), is_write_operation=True)
-    db_logger.info(f"Активная персона для {user_id} изменена на '{persona_id}'.", extra={'user_id': str(user_id)})
 
 def get_user_persona(user_id: int) -> str:
-    """Получает активную персону пользователя."""
     query = "SELECT active_persona FROM users WHERE user_id = ?"
     result = _execute_query(query, (user_id,), fetch_one=True)
     return result['active_persona'] if result and result['active_persona'] else 'default'
-
-# --- Функции для работы с историей сообщений (conversations) ---
-
-def store_message(user_id: int, role: str, message_text: str,
-                  prompt_tokens: int = 0, completion_tokens: int = 0, total_tokens: int = 0):
-    """Сохраняет сообщение в базу данных, включая информацию о токенах."""
-    if role not in ('user', 'bot', 'system'):
-        return
-    timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    query = """
-        INSERT INTO conversations 
-        (user_id, timestamp, role, message_text, prompt_tokens, completion_tokens, total_tokens) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    """
-    params = (user_id, timestamp, role, message_text, prompt_tokens, completion_tokens, total_tokens)
-    _execute_query(query, params, is_write_operation=True)
-
-def get_conversation_history(user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
-    query = "SELECT role, message_text FROM conversations WHERE user_id = ? ORDER BY conversation_id DESC LIMIT ?"
-    rows = _execute_query(query, (user_id, limit), fetch_all=True)
-    return [dict(row) for row in reversed(rows)] if rows else []
-
-def get_conversation_history_by_date(user_id: int, history_date: datetime.date) -> List[Dict[str, Any]]:
-    start_dt = datetime.datetime.combine(history_date, datetime.time.min, tzinfo=datetime.timezone.utc)
-    end_dt = datetime.datetime.combine(history_date, datetime.time.max, tzinfo=datetime.timezone.utc)
-    query = "SELECT role, message_text FROM conversations WHERE user_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp ASC"
-    rows = _execute_query(query, (user_id, start_dt.isoformat(), end_dt.isoformat()), fetch_all=True)
-    return [dict(row) for row in rows] if rows else []
-
-def get_conversation_count(user_id: int) -> int:
-    query = "SELECT COUNT(*) FROM conversations WHERE user_id = ?"
-    count = _execute_query(query, (user_id,))
-    return count if count is not None else 0
 
 def get_first_interaction_date(user_id: int) -> Optional[str]:
     query = "SELECT first_interaction_date FROM users WHERE user_id = ?"
@@ -306,41 +352,21 @@ def get_first_interaction_date(user_id: int) -> Optional[str]:
     return result['first_interaction_date'] if result else None
 
 def get_token_usage_by_period(user_id: int, period: str) -> Dict[str, int]:
-    """
-    Возвращает суммарное количество токенов за указанный период ('today' или 'month').
-    """
     if period == 'today':
         start_date_str = datetime.date.today().isoformat() + "T00:00:00Z"
     elif period == 'month':
         start_date_str = datetime.date.today().replace(day=1).isoformat() + "T00:00:00Z"
     else:
         return {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
-
-    query = """
-        SELECT 
-            SUM(prompt_tokens), 
-            SUM(completion_tokens), 
-            SUM(total_tokens) 
-        FROM conversations 
-        WHERE user_id = ? AND timestamp >= ?
-    """
+    query = "SELECT SUM(prompt_tokens), SUM(completion_tokens), SUM(total_tokens) FROM conversations WHERE user_id = ? AND timestamp >= ?"
     params = (user_id, start_date_str)
-
     conn = _get_db_connection()
     cursor = conn.cursor()
     try:
         cursor.execute(query, params)
         result = cursor.fetchone()
         if result and result[0] is not None:
-            return {
-                'prompt_tokens': int(result[0]),
-                'completion_tokens': int(result[1]),
-                'total_tokens': int(result[2])
-            }
-    except sqlite3.Error as e:
-        db_logger.exception(f"Ошибка при получении статистики токенов за период '{period}' для user {user_id}: {e}")
+            return {'prompt_tokens': int(result[0]), 'completion_tokens': int(result[1]), 'total_tokens': int(result[2])}
     finally:
-        if conn:
-            conn.close()
-
+        if conn: conn.close()
     return {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}

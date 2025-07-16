@@ -19,6 +19,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
                          "*/reset* - Сбросить контекст текущего диалога, не меняя настроек.\n"
                          "*/set_api_key* (или */setapikey*) - Установить или обновить ваш API ключ от Google AI.\n"
                          "*/settings* - Открыть меню настроек (стиль общения, язык, API ключ).\n"
+                         "*/dialogs* - Управление диалогами (создание, переключение, удаление).\n" # НОВЫЙ ПУНКТ
                          "*/history* - Посмотреть историю сообщений за определенную дату.\n"
                          "*/translate* - Перевести текст на другой язык.\n"
                          "*/usage* - Посмотреть статистику использования токенов за сегодня и за месяц.",
@@ -30,30 +31,50 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_btn_set_api_key': "🔑 Установить/обновить API ключ",
         'settings_model_section': "--- Нейросетевая модель ---",
         'settings_btn_choose_model': "🧠 Выбрать модель",
-        'settings_persona_section': "--- Роль ассистента (Персона) ---", # НОВОЕ
-        'settings_btn_choose_persona': "🎭 Выбрать персону", # НОВОЕ
+        'settings_persona_section': "--- Роль ассистента (Персона) ---",
+        'settings_btn_choose_persona': "🎭 Выбрать персону",
         'style_changed_notice': "Стиль общения изменен. Контекст диалога сброшен.",
-        'persona_changed_notice': "✅ Персона изменена на *{persona_name}*. Контекст диалога сброшен.", # НОВОЕ
+        'persona_changed_notice': "✅ Персона изменена на *{persona_name}*. Контекст диалога сброшен.",
         # --- Выбор модели ---
         'model_selection_title': "🧠 *Выбор модели Gemini*",
         'model_selection_loading': "⏳ Загружаю список доступных моделей...",
         'model_selection_error': "❌ Не удалось загрузить список моделей. Проверьте ваш API ключ или попробуйте позже.",
         'model_changed_notice': "✅ Модель изменена на *{model_name}*. Контекст диалога сброшен.",
         'btn_back_to_settings': "⬅️ Назад в настройки",
-        # --- НОВОЕ: Выбор персоны ---
+        # --- Выбор персоны ---
         'persona_selection_title': "🎭 *Выбор персоны ассистента*",
         'persona_selection_desc': "Выберите роль, которую бот будет отыгрывать. Это изменит его стиль общения и экспертизу. Текущие *стили* (краткий, подробный и т.д.) будут игнорироваться.",
+        # --- НОВОЕ: Управление диалогами ---
+        'dialogs_menu_title': "🗂️ *Управление диалогами*",
+        'dialogs_menu_desc': "Здесь вы можете создавать новые диалоги, переключаться между ними, переименовывать и удалять. Активный диалог отмечен ✅.",
+        'btn_create_dialog': "➕ Создать новый",
+        'btn_rename_dialog': "✏️ Переименовать",
+        'btn_delete_dialog': "❌ Удалить",
+        'btn_back_to_main_menu': "⬅️ Главное меню",
+        'dialog_enter_new_name_prompt': "Введите название для нового диалога:",
+        'dialog_created_success': "✅ Диалог *{name}* создан и установлен как активный. Контекст сброшен.",
+        'dialog_switched_success': "✅ Активный диалог изменен на *{name}*. Контекст восстановлен.",
+        'dialog_deleted_success': "🗑️ Диалог *{name}* удален. Активным установлен другой диалог.",
+        'dialog_deleted_last_success': "🗑️ Диалог *{name}* удален. Создан новый 'Основной диалог' и сделан активным.",
+        'dialog_enter_rename_prompt': "Введите новое название для диалога *{name}*:",
+        'dialog_renamed_success': "✅ Диалог переименован в *{new_name}*.",
+        'dialog_delete_confirmation': "Вы уверены, что хотите удалить диалог *{name}*? Это действие необратимо.",
+        'btn_confirm_delete': "Да, удалить",
+        'btn_cancel_delete': "Нет, отмена",
+        'dialog_name_too_long': "Название диалога слишком длинное. Пожалуйста, введите название до 50 символов.",
+        'dialog_name_invalid': "Название диалога не может быть пустым.",
+        'dialog_error_delete_active': "Нельзя удалить активный диалог. Сначала переключитесь на другой.",
         # --- Команды и Состояния ---
-        'cmd_reset_success': "✅ Контекст разговора и ваше текущее состояние сброшены.",
+        'cmd_reset_success': "✅ Контекст текущего диалога сброшен.",
         'set_api_key_prompt': "Пожалуйста, отправьте ваш Google AI API ключ. Сообщение с ключом будет удалено.",
-        'history_prompt': "🗓️ Пожалуйста, выберите дату для просмотра истории:",
+        'history_prompt': "🗓️ Пожалуйста, выберите дату для просмотра истории текущего диалога:",
         'translate_prompt': "Выберите язык, на который нужно перевести текст:",
         'language_selected_notice': "Язык выбран: {lang_name}.",
         'send_text_to_translate_prompt': "Теперь отправьте мне текст, который нужно перевести на {lang_name}.",
         # --- Обработка API ключа ---
         'api_key_verifying': "Проверяю ключ...",
         'api_key_success': "✅ Ключ успешно установлен и зашифрован! Теперь вы можете общаться со мной.",
-        'api_key_invalid': "❌ Этот ключ недействителен. Пожалуйста, проверьте его и попробуйте снова. Вы можете отправить другой ключ прямо сейчас или вызвать /set_api_key позже.",
+        'api_key_invalid': "❌ Этот ключ недействителен. Пожалуйста, проверьте его и попробуйте снова.",
         'api_key_needed_for_chat': "Для общения со мной нужен API ключ. Пожалуйста, установите его с помощью команды /set_api_key.",
         'api_key_needed_for_vision': "Для анализа изображений нужен API ключ. Пожалуйста, установите его с помощью команды /set_api_key.",
         'api_key_needed_for_feature': "Для использования этой функции нужен API ключ. Пожалуйста, установите его через /set_api_key.",
@@ -62,7 +83,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'history_for_date': "История за",
         'history_role_user': "Вы",
         'history_role_bot': "Бот",
-        'history_no_messages': "В этот день сообщений не найдено.",
+        'history_no_messages': "В этот день в данном диалоге сообщений не найдено.",
         'history_date_error': "Произошла ошибка при обработке даты. Попробуйте еще раз.",
         # --- Статистика расходов ---
         'usage_title': "📊 *Статистика расходов токенов*",
@@ -87,6 +108,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'gemini_error_invalid_argument': "🤔 *Ошибка: Некорректный запрос.*\nВозможно, вы пытаетесь отправить контент, который не поддерживается выбранной моделью (например, видео).",
         'gemini_error_unknown': "🤯 *Произошла неизвестная ошибка при обращении к API.*\nПожалуйста, попробуйте еще раз. Если ошибка повторяется, свяжитесь с администратором.",
         # --- Кнопки ---
+        'btn_dialogs': "🗂️ Диалоги", # НОВАЯ КНОПКА
         'btn_translate': "🇷🇺 Перевести",
         'btn_history': "📜 История",
         'btn_account': "👤 Личный кабинет",
@@ -111,6 +133,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
                          "*/reset* - Clear the context of the current conversation without changing settings.\n"
                          "*/set_api_key* (or */setapikey*) - Set or update your Google AI API key.\n"
                          "*/settings* - Open the settings menu (communication style, language, API key).\n"
+                         "*/dialogs* - Manage dialogs (create, switch, delete).\n" # NEW ITEM
                          "*/history* - View message history for a specific date.\n"
                          "*/translate* - Translate text to another language.\n"
                          "*/usage* - View token usage statistics for today and this month.",
@@ -122,30 +145,50 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'settings_btn_set_api_key': "🔑 Set/Update API Key",
         'settings_model_section': "--- Neural Network Model ---",
         'settings_btn_choose_model': "🧠 Choose Model",
-        'settings_persona_section': "--- Assistant's Role (Persona) ---", # NEW
-        'settings_btn_choose_persona': "🎭 Choose Persona", # NEW
+        'settings_persona_section': "--- Assistant's Role (Persona) ---",
+        'settings_btn_choose_persona': "🎭 Choose Persona",
         'style_changed_notice': "Communication style changed. The conversation context has been reset.",
-        'persona_changed_notice': "✅ Persona changed to *{persona_name}*. The conversation context has been reset.", # NEW
+        'persona_changed_notice': "✅ Persona changed to *{persona_name}*. The conversation context has been reset.",
         # --- Model Selection ---
         'model_selection_title': "🧠 *Gemini Model Selection*",
         'model_selection_loading': "⏳ Loading list of available models...",
         'model_selection_error': "❌ Could not load the model list. Please check your API key or try again later.",
         'model_changed_notice': "✅ Model changed to *{model_name}*. The conversation context has been reset.",
         'btn_back_to_settings': "⬅️ Back to Settings",
-        # --- NEW: Persona Selection ---
+        # --- Persona Selection ---
         'persona_selection_title': "🎭 *Assistant Persona Selection*",
         'persona_selection_desc': "Choose a role for the bot to play. This will change its communication style and expertise. Current *styles* (concise, detailed, etc.) will be ignored.",
+        # --- NEW: Dialog Management ---
+        'dialogs_menu_title': "🗂️ *Dialog Management*",
+        'dialogs_menu_desc': "Here you can create new dialogs, switch between them, rename, and delete. The active dialog is marked with ✅.",
+        'btn_create_dialog': "➕ Create New",
+        'btn_rename_dialog': "✏️ Rename",
+        'btn_delete_dialog': "❌ Delete",
+        'btn_back_to_main_menu': "⬅️ Main Menu",
+        'dialog_enter_new_name_prompt': "Enter a name for the new dialog:",
+        'dialog_created_success': "✅ Dialog *{name}* created and set as active. Context has been reset.",
+        'dialog_switched_success': "✅ Active dialog changed to *{name}*. Context has been restored.",
+        'dialog_deleted_success': "🗑️ Dialog *{name}* has been deleted. Another dialog has been set as active.",
+        'dialog_deleted_last_success': "🗑️ Dialog *{name}* has been deleted. A new 'General Chat' has been created and made active.",
+        'dialog_enter_rename_prompt': "Enter a new name for the dialog *{name}*:",
+        'dialog_renamed_success': "✅ Dialog renamed to *{new_name}*.",
+        'dialog_delete_confirmation': "Are you sure you want to delete the dialog *{name}*? This action cannot be undone.",
+        'btn_confirm_delete': "Yes, delete",
+        'btn_cancel_delete': "No, cancel",
+        'dialog_name_too_long': "The dialog name is too long. Please enter a name up to 50 characters.",
+        'dialog_name_invalid': "The dialog name cannot be empty.",
+        'dialog_error_delete_active': "You cannot delete the active dialog. Switch to another one first.",
         # --- Commands and States ---
-        'cmd_reset_success': "✅ The conversation context and your current state have been reset.",
+        'cmd_reset_success': "✅ The context of the current dialog has been reset.",
         'set_api_key_prompt': "Please send your Google AI API key. The message with the key will be deleted.",
-        'history_prompt': "🗓️ Please select a date to view the history:",
+        'history_prompt': "🗓️ Please select a date to view the history of the current dialog:",
         'translate_prompt': "Select the language to translate the text into:",
         'language_selected_notice': "Language selected: {lang_name}.",
         'send_text_to_translate_prompt': "Now send me the text to be translated into {lang_name}.",
         # --- API Key Handling ---
         'api_key_verifying': "Verifying key...",
         'api_key_success': "✅ Key successfully set and encrypted! You can now chat with me.",
-        'api_key_invalid': "❌ This key is invalid. Please check it and try again. You can send another key right now or call /set_api_key later.",
+        'api_key_invalid': "❌ This key is invalid. Please check it and try again.",
         'api_key_needed_for_chat': "To chat with me, an API key is required. Please set it using the /set_api_key command.",
         'api_key_needed_for_vision': "To analyze images, an API key is required. Please set it using the /set_api_key command.",
         'api_key_needed_for_feature': "To use this feature, an API key is required. Please set it via /set_api_key.",
@@ -154,7 +197,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'history_for_date': "History for",
         'history_role_user': "You",
         'history_role_bot': "Bot",
-        'history_no_messages': "No messages found on this day.",
+        'history_no_messages': "No messages found on this day in this dialog.",
         'history_date_error': "An error occurred while processing the date. Please try again.",
         # --- Usage Statistics ---
         'usage_title': "📊 *Token Usage Statistics*",
@@ -171,14 +214,15 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'state_wrong_content_type': "Please send text to complete the current action, or press /reset.",
         'translation_error_generic': "Failed to perform translation. Please try again.",
         # --- Gemini API Errors (User-Friendly) ---
-        'gemini_error_api_key_invalid': "🚫 *Error: Invalid API Key.*\nPlease check if your key is correct and set it again using /set_api_key.",
-        'gemini_error_permission_denied': "🚫 *Error: Permission Denied.*\nEnsure your API key is activated and has the necessary permissions in Google AI Studio.",
-        'gemini_error_quota_exceeded': "⏳ *Error: Quota Exceeded.*\nYou have exhausted your API request limit. Please try again later or check your limits in your Google account.",
-        'gemini_error_safety': "censored:censored_black_rectangle: *Response Blocked.*\nThe generated response was blocked by Google's safety settings. Please try rephrasing your request.",
+        'gemini_error_api_key_invalid': "🚫 *Error: Invalid API Key.*\nPlease check your key and set it again using /set_api_key.",
+        'gemini_error_permission_denied': "🚫 *Error: Permission Denied.*\nEnsure your API key is activated and has permissions in Google AI Studio.",
+        'gemini_error_quota_exceeded': "⏳ *Error: Quota Exceeded.*\nYou have exhausted your API request limit. Try again later or check your Google account limits.",
+        'gemini_error_safety': "censored:censored_black_rectangle: *Response Blocked.*\nThe generated response was blocked by Google's safety settings. Try rephrasing your request.",
         'gemini_error_unavailable': "🛠️ *Service Temporarily Unavailable.*\nGoogle's servers might be overloaded. Please try again in a few minutes.",
-        'gemini_error_invalid_argument': "🤔 *Error: Invalid Request.*\nYou might be trying to send content that is not supported by the selected model (e.g., a video).",
-        'gemini_error_unknown': "🤯 *An unknown error occurred while contacting the API.*\nPlease try again. If the error persists, contact the administrator.",
+        'gemini_error_invalid_argument': "🤔 *Error: Invalid Request.*\nYou might be trying to send content not supported by the model (e.g., a video).",
+        'gemini_error_unknown': "🤯 *An unknown API error occurred.*\nPlease try again. If the error persists, contact the administrator.",
         # --- Buttons ---
+        'btn_dialogs': "🗂️ Dialogs", # NEW BUTTON
         'btn_translate': "🇬🇧 Translate",
         'btn_history': "📜 History",
         'btn_account': "👤 My Account",

@@ -4,17 +4,19 @@ import datetime
 from typing import List, Optional, Dict, Any
 
 from config.settings import (
-    BOT_STYLES, TRANSLATE_LANGUAGES, BOT_PERSONAS, # <-- Импортируем BOT_PERSONAS
+    BOT_STYLES, TRANSLATE_LANGUAGES, BOT_PERSONAS,
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_IGNORE,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX,
     CALLBACK_REPORT_ERROR, CALLBACK_LANG_PREFIX,
     CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY,
     CALLBACK_SETTINGS_CHOOSE_MODEL_MENU, CALLBACK_SETTINGS_MODEL_PREFIX, CALLBACK_SETTINGS_BACK_TO_MAIN,
-    CALLBACK_SETTINGS_PERSONA_MENU, CALLBACK_SETTINGS_PERSONA_PREFIX # <-- Импортируем префиксы для персон
+    CALLBACK_SETTINGS_PERSONA_MENU, CALLBACK_SETTINGS_PERSONA_PREFIX,
+    # НОВЫЕ ИМПОРТЫ ДЛЯ ДИАЛОГОВ
+    CALLBACK_DIALOGS_MENU, CALLBACK_DIALOG_SWITCH_PREFIX, CALLBACK_DIALOG_RENAME_PREFIX,
+    CALLBACK_DIALOG_DELETE_PREFIX, CALLBACK_DIALOG_CREATE, CALLBACK_DIALOG_CONFIRM_DELETE_PREFIX
 )
 from database import db_manager
 from logger_config import get_logger
-# Импортируем наш модуль локализации
 from . import localization as loc
 
 logger = get_logger('markup_helpers')
@@ -24,15 +26,64 @@ def create_main_keyboard(lang_code: str) -> types.ReplyKeyboardMarkup:
     markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
 
     buttons = [
+        types.KeyboardButton(loc.get_text('btn_dialogs', lang_code)),
         types.KeyboardButton(loc.get_text('btn_account', lang_code)),
         types.KeyboardButton(loc.get_text('btn_usage', lang_code)),
         types.KeyboardButton(loc.get_text('btn_settings', lang_code)),
         types.KeyboardButton(loc.get_text('btn_translate', lang_code)),
         types.KeyboardButton(loc.get_text('btn_history', lang_code)),
-        types.KeyboardButton(loc.get_text('btn_reset', lang_code)),
         types.KeyboardButton(loc.get_text('btn_help', lang_code)),
+        types.KeyboardButton(loc.get_text('btn_reset', lang_code)),
     ]
     markup.add(*buttons)
+    return markup
+
+
+def create_dialogs_menu_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
+    """Создает клавиатуру для управления диалогами."""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    lang_code = db_manager.get_user_language(user_id)
+    dialogs = db_manager.get_user_dialogs(user_id)
+
+    dialog_buttons = []
+    active_dialog_id = None
+    for dialog in dialogs:
+        if dialog['dialog_id'] == dialog['active_dialog_id']:
+            active_dialog_id = dialog['dialog_id']
+            break
+
+    for dialog in dialogs:
+        is_active = dialog['dialog_id'] == active_dialog_id
+        button_text = f"✅ {dialog['name']}" if is_active else dialog['name']
+        callback_data = CALLBACK_IGNORE if is_active else f"{CALLBACK_DIALOG_SWITCH_PREFIX}{dialog['dialog_id']}"
+        dialog_buttons.append(types.InlineKeyboardButton(button_text, callback_data=callback_data))
+
+    for button in dialog_buttons:
+        markup.add(button)
+
+    if active_dialog_id:
+        control_buttons = [
+            types.InlineKeyboardButton(loc.get_text('btn_create_dialog', lang_code), callback_data=CALLBACK_DIALOG_CREATE),
+            types.InlineKeyboardButton(loc.get_text('btn_rename_dialog', lang_code), callback_data=f"{CALLBACK_DIALOG_RENAME_PREFIX}{active_dialog_id}"),
+            types.InlineKeyboardButton(loc.get_text('btn_delete_dialog', lang_code), callback_data=f"{CALLBACK_DIALOG_DELETE_PREFIX}{active_dialog_id}")
+        ]
+        markup.row(*control_buttons)
+
+    return markup
+
+
+def create_confirm_delete_keyboard(dialog_id: int, lang_code: str) -> types.InlineKeyboardMarkup:
+    """Создает клавиатуру для подтверждения удаления диалога."""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    confirm_button = types.InlineKeyboardButton(
+        loc.get_text('btn_confirm_delete', lang_code),
+        callback_data=f"{CALLBACK_DIALOG_CONFIRM_DELETE_PREFIX}{dialog_id}"
+    )
+    cancel_button = types.InlineKeyboardButton(
+        loc.get_text('btn_cancel_delete', lang_code),
+        callback_data=CALLBACK_DIALOGS_MENU
+    )
+    markup.add(confirm_button, cancel_button)
     return markup
 
 
@@ -53,43 +104,37 @@ def create_language_selection_keyboard() -> types.InlineKeyboardMarkup:
 def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     """Создает inline-клавиатуру настроек, включая стиль, язык и API ключ."""
     markup = types.InlineKeyboardMarkup(row_width=1)
-
-    # Получаем текущие настройки пользователя
     current_style = db_manager.get_user_bot_style(user_id)
     current_lang = db_manager.get_user_language(user_id)
 
     # --- Секция API ключа ---
     markup.add(types.InlineKeyboardButton(loc.get_text('settings_api_key_section', current_lang), callback_data=CALLBACK_IGNORE))
-    api_key_button = types.InlineKeyboardButton(
+    markup.add(types.InlineKeyboardButton(
         loc.get_text('settings_btn_set_api_key', current_lang),
         callback_data=CALLBACK_SETTINGS_SET_API_KEY
-    )
-    markup.add(api_key_button)
+    ))
 
     # --- Секция выбора модели ---
     markup.add(types.InlineKeyboardButton(loc.get_text('settings_model_section', current_lang), callback_data=CALLBACK_IGNORE))
-    model_button = types.InlineKeyboardButton(
+    markup.add(types.InlineKeyboardButton(
         loc.get_text('settings_btn_choose_model', current_lang),
         callback_data=CALLBACK_SETTINGS_CHOOSE_MODEL_MENU
-    )
-    markup.add(model_button)
+    ))
 
-    # --- НОВАЯ СЕКЦИЯ: Выбор персоны ---
+    # --- Секция выбора персоны ---
     markup.add(types.InlineKeyboardButton(loc.get_text('settings_persona_section', current_lang), callback_data=CALLBACK_IGNORE))
-    persona_button = types.InlineKeyboardButton(
+    markup.add(types.InlineKeyboardButton(
         loc.get_text('settings_btn_choose_persona', current_lang),
         callback_data=CALLBACK_SETTINGS_PERSONA_MENU
-    )
-    markup.add(persona_button)
+    ))
 
-    # --- Секция стиля общения ---
+    # --- Секция стиля общения (ВОЗВРАЩЕНА) ---
     markup.add(types.InlineKeyboardButton(loc.get_text('settings_style_section', current_lang), callback_data=CALLBACK_IGNORE))
     style_buttons = []
     for style_code, style_name in BOT_STYLES.items():
         button_text = f"✅ {style_name}" if style_code == current_style else style_name
         style_buttons.append(types.InlineKeyboardButton(button_text, callback_data=f'{CALLBACK_SETTINGS_STYLE_PREFIX}{style_code}'))
 
-    # Размещаем кнопки стилей по две в ряд для компактности
     style_rows = [style_buttons[i:i + 2] for i in range(0, len(style_buttons), 2)]
     for row in style_rows:
         markup.add(*row)
@@ -104,7 +149,7 @@ def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
 
     return markup
 
-# НОВАЯ ФУНКЦИЯ
+
 def create_persona_selection_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     """Создает клавиатуру для выбора персоны."""
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -113,20 +158,16 @@ def create_persona_selection_keyboard(user_id: int) -> types.InlineKeyboardMarku
 
     buttons = []
     for persona_id, persona_data in BOT_PERSONAS.items():
-        # Получаем имя персоны на нужном языке
         persona_name = persona_data.get(f"name_{lang_code}", persona_data["name_ru"])
-
         button_text = f"✅ {persona_name}" if persona_id == current_persona_id else persona_name
         buttons.append(types.InlineKeyboardButton(
             text=button_text,
             callback_data=f"{CALLBACK_SETTINGS_PERSONA_PREFIX}{persona_id}"
         ))
 
-    # Распределяем кнопки по 2 в ряд
     for i in range(0, len(buttons), 2):
         markup.add(*buttons[i:i + 2])
 
-    # Добавляем кнопку "Назад"
     markup.add(types.InlineKeyboardButton(
         loc.get_text('btn_back_to_settings', lang_code),
         callback_data=CALLBACK_SETTINGS_BACK_TO_MAIN
@@ -162,7 +203,6 @@ def create_calendar_keyboard(year: Optional[int] = None, month: Optional[int] = 
     markup = types.InlineKeyboardMarkup(row_width=7)
 
     try:
-        # Форматируем название месяца на английском, так как locale может быть не настроен
         month_name = datetime.date(year, month, 1).strftime("%B %Y")
     except ValueError:
         year, month = now.year, now.month
@@ -174,7 +214,6 @@ def create_calendar_keyboard(year: Optional[int] = None, month: Optional[int] = 
 
     try:
         first_day_of_month = datetime.date(year, month, 1)
-        # Корректное определение последнего дня месяца
         if month == 12:
             last_day_of_month_day = 31
         else:
@@ -198,9 +237,7 @@ def create_calendar_keyboard(year: Optional[int] = None, month: Optional[int] = 
     except ValueError as date_err:
         logger.error(f"Ошибка генерации дней календаря для {year}-{month}: {date_err}")
 
-    # --- Навигация ---
     prev_month_date = first_day_of_month - datetime.timedelta(days=1)
-    # Корректный переход на следующий месяц
     if month == 12:
         next_month_date = datetime.date(year + 1, 1, 1)
     else:
