@@ -1,0 +1,31 @@
+# --- START OF FILE requirements.txt ---
+# Telegram Bot Core (Async version)
+pyTelegramBotAPI[async]>=4.15.0
+aiohttp>=3.8.0 # <--- Явно добавляем зависимость для async telebot
+
+# Google Gemini API
+google-generativeai>=0.4.0
+
+# Loading .env files
+python-dotenv>=1.0.0
+
+# Logging configuration
+PyYAML>=6.0
+
+# Scheduling
+APScheduler>=3.10.0
+pytz>=2023.3 # <--- Работа с часовыми поясами (уже есть)
+timezonefinder[numba]>=6.2.0 # <--- ДОБАВЛЕНО: Определение таймзоны по координатам (с numba для скорости)
+
+# File processing
+python-docx>=1.1.0
+PyPDF2>=3.0.0 # <--- Убедимся, что версия актуальна
+
+# Web scraping
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0 # <--- Рекомендуется для BeautifulSoup
+
+# Image processing
+Pillow>=10.0.0
+# --- END OF FILE requirements.txt ---
