@@ -7,8 +7,9 @@ from logging import LoggerAdapter, LogRecord
 from typing import MutableMapping, Any, Optional
 
 # Определяем базовую директорию проекта (папка, где лежит main.py)
-# Это делает пути более надежными, независимо от того, откуда запускается скрипт.
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# os.path.abspath(__file__) -> d:\Projects\MyGemini\logger_config.py
+# os.path.dirname(...) -> d:\Projects\MyGemini
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 LOG_CONFIG_FILE = os.path.join(BASE_DIR, "config", "logging.yaml")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
@@ -80,7 +81,8 @@ def get_logger(name: str, user_id: Optional[str | int] = None) -> UserIdAdapter:
     # После setup_logging() это должно быть так, но для надежности можно проверить.
     if not isinstance(logger, UserIdAdapter):
         # Эта ветка не должна выполняться при нормальной работе, но она защищает от сбоев
-        logger = UserId-Adapter(logger, {'user_id': user_id_str})
+        # ИСПРАВЛЕНА ОПЕЧАТКА: UserId-Adapter -> UserIdAdapter
+        logger = UserIdAdapter(logger, {'user_id': user_id_str})
     else:
         # Если это уже адаптер, просто обновляем его 'extra'
         logger.extra['user_id'] = user_id_str
