@@ -18,7 +18,7 @@ from config.settings import (
 )
 from database import db_manager
 from services import gemini_service
-from services.gemini_service import GeminiAPIError 
+from services.gemini_service import GeminiAPIError
 from utils import markup_helpers as mk
 from utils import localization as loc
 from . import telegram_helpers as tg_helpers
@@ -40,8 +40,8 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
         await tg_helpers.answer_callback_query(bot, call)
         return
 
-    db_manager.add_or_update_user(user_id)
-    lang_code = db_manager.get_user_language(user_id)
+    await db_manager.add_or_update_user(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
 
     # Маршрутизатор колбэков
     try:
@@ -100,12 +100,14 @@ async def handle_dialogs_menu(bot: AsyncTeleBot, call: types.CallbackQuery, lang
     """Отображает меню управления диалогами."""
     text = f"{loc.get_text('dialogs_menu_title', lang_code)}\n\n" \
            f"{loc.get_text('dialogs_menu_desc', lang_code)}"
+    
+    dialogs_keyboard = await mk.create_dialogs_menu_keyboard(call.from_user.id)
     await tg_helpers.edit_message_text_safe(
         bot,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=text,
-        reply_markup=mk.create_dialogs_menu_keyboard(call.from_user.id)
+        reply_markup=dialogs_keyboard
     )
     await tg_helpers.answer_callback_query(bot, call)
 
@@ -121,9 +123,9 @@ async def handle_create_dialog_start(bot: AsyncTeleBot, call: types.CallbackQuer
 async def handle_switch_dialog(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Переключает активный диалог."""
     dialog_id_to_switch = int(call.data[len(CALLBACK_DIALOG_SWITCH_PREFIX):])
-    db_manager.set_active_dialog(call.from_user.id, dialog_id_to_switch)
+    await db_manager.set_active_dialog(call.from_user.id, dialog_id_to_switch)
 
-    dialogs = db_manager.get_user_dialogs(call.from_user.id)
+    dialogs = await db_manager.get_user_dialogs(call.from_user.id)
     switched_dialog_name = next((d['name'] for d in dialogs if d['dialog_id'] == dialog_id_to_switch), '???')
 
     await handle_dialogs_menu(bot, call, lang_code) # Обновляем меню
@@ -132,7 +134,7 @@ async def handle_switch_dialog(bot: AsyncTeleBot, call: types.CallbackQuery, lan
 async def handle_rename_dialog_start(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Начинает процесс переименования диалога."""
     dialog_id_to_rename = int(call.data[len(CALLBACK_DIALOG_RENAME_PREFIX):])
-    dialogs = db_manager.get_user_dialogs(call.from_user.id)
+    dialogs = await db_manager.get_user_dialogs(call.from_user.id)
     dialog_name = next((d['name'] for d in dialogs if d['dialog_id'] == dialog_id_to_rename), '???')
 
     await bot.set_state(call.from_user.id, STATE_WAITING_FOR_RENAME_DIALOG, call.message.chat.id)
@@ -146,10 +148,18 @@ async def handle_rename_dialog_start(bot: AsyncTeleBot, call: types.CallbackQuer
 
 async def handle_delete_dialog_start(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Показывает подтверждение на удаление диалога."""
+    user_id = call.from_user.id
     dialog_id_to_delete = int(call.data[len(CALLBACK_DIALOG_DELETE_PREFIX):])
-    dialogs = db_manager.get_user_dialogs(call.from_user.id)
+    
+    dialogs = await db_manager.get_user_dialogs(user_id)
+    active_dialog_id = await db_manager.get_active_dialog_id(user_id)
+
+    if dialog_id_to_delete == active_dialog_id:
+        await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('dialog_error_delete_active', lang_code), show_alert=True)
+        return
 
     if len(dialogs) <= 1:
+        # Эта проверка на случай, если что-то пошло не так, т.к. активный диалог уже не должен был дать сюда попасть.
         await tg_helpers.answer_callback_query(bot, call, text="Нельзя удалить последний диалог.", show_alert=True)
         return
 
@@ -164,28 +174,40 @@ async def handle_delete_dialog_start(bot: AsyncTeleBot, call: types.CallbackQuer
 
 async def handle_delete_dialog_confirm(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Окончательно удаляет диалог."""
+    user_id = call.from_user.id
     dialog_id_to_delete = int(call.data[len(CALLBACK_DIALOG_CONFIRM_DELETE_PREFIX):])
 
-    deleted_dialog_name = db_manager.delete_dialog(dialog_id_to_delete)
-
-    if deleted_dialog_name:
-        await handle_dialogs_menu(bot, call, lang_code)
-        await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('dialog_deleted_success', lang_code).format(name=deleted_dialog_name))
-    else:
+    # Удаляем сам диалог
+    deleted_dialog_name = await db_manager.delete_dialog(user_id, dialog_id_to_delete)
+    if not deleted_dialog_name:
         await tg_helpers.answer_callback_query(bot, call, text="Ошибка при удалении диалога.", show_alert=True)
+        return
 
+    # После удаления проверяем, что осталось.
+    remaining_dialogs = await db_manager.get_user_dialogs(user_id)
+    if not remaining_dialogs:
+        # Такого быть не должно из-за проверок выше, но это страховка
+        new_dialog_name = "Основной диалог" if lang_code == 'ru' else "General Chat"
+        await db_manager.create_dialog(user_id, new_dialog_name, set_active=True)
+        await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('dialog_deleted_last_success', lang_code).format(name=deleted_dialog_name))
+    else:
+         await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('dialog_deleted_success', lang_code).format(name=deleted_dialog_name))
+
+    # В любом случае обновляем меню, чтобы показать актуальный список
+    await handle_dialogs_menu(bot, call, lang_code)
 
 # --- Обработчики настроек ---
 
 async def handle_back_to_main_settings(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Возвращает пользователя в главное меню настроек."""
     user_id = call.from_user.id
+    settings_keyboard = await mk.create_settings_keyboard(user_id)
     await tg_helpers.edit_message_text_safe(
         bot,
         chat_id=call.message.chat.id,
         message_id=call.message.message_id,
         text=loc.get_text('settings_title', lang_code),
-        reply_markup=mk.create_settings_keyboard(user_id)
+        reply_markup=settings_keyboard
     )
     await tg_helpers.answer_callback_query(bot, call)
 
@@ -200,7 +222,7 @@ async def handle_set_api_key_from_settings(bot: AsyncTeleBot, call: types.Callba
 async def handle_language_setting(bot: AsyncTeleBot, call: types.CallbackQuery):
     user_id = call.from_user.id
     new_lang_code = call.data[len(CALLBACK_SETTINGS_LANG_PREFIX):]
-    db_manager.set_user_language(user_id, new_lang_code)
+    await db_manager.set_user_language(user_id, new_lang_code)
     await handle_back_to_main_settings(bot, call, new_lang_code)
     await tg_helpers.answer_callback_query(bot, call, text=f"Language set to {'English' if new_lang_code == 'en' else 'Русский'}")
 
@@ -208,8 +230,8 @@ async def handle_style_setting(bot: AsyncTeleBot, call: types.CallbackQuery, lan
     user_id = call.from_user.id
     style_code = call.data[len(CALLBACK_SETTINGS_STYLE_PREFIX):]
     if style_code in BOT_STYLES:
-        db_manager.set_user_bot_style(user_id, style_code)
-        active_dialog_id = db_manager.get_active_dialog_id(user_id)
+        await db_manager.set_user_bot_style(user_id, style_code)
+        active_dialog_id = await db_manager.get_active_dialog_id(user_id)
         if active_dialog_id:
             gemini_service.reset_dialog_chat(active_dialog_id)
         await handle_back_to_main_settings(bot, call, lang_code)
@@ -219,9 +241,10 @@ async def handle_persona_menu(bot: AsyncTeleBot, call: types.CallbackQuery, lang
     user_id = call.from_user.id
     text = (f"{loc.get_text('persona_selection_title', lang_code)}\n\n"
             f"{loc.get_text('persona_selection_desc', lang_code)}")
+    persona_keyboard = await mk.create_persona_selection_keyboard(user_id)
     await tg_helpers.edit_message_text_safe(
         bot, call.message.chat.id, call.message.message_id,
-        text=text, reply_markup=mk.create_persona_selection_keyboard(user_id)
+        text=text, reply_markup=persona_keyboard
     )
     await tg_helpers.answer_callback_query(bot, call)
 
@@ -229,8 +252,8 @@ async def handle_persona_selection(bot: AsyncTeleBot, call: types.CallbackQuery,
     user_id = call.from_user.id
     persona_id = call.data[len(CALLBACK_SETTINGS_PERSONA_PREFIX):]
     if persona_id in BOT_PERSONAS:
-        db_manager.set_user_persona(user_id, persona_id)
-        active_dialog_id = db_manager.get_active_dialog_id(user_id)
+        await db_manager.set_user_persona(user_id, persona_id)
+        active_dialog_id = await db_manager.get_active_dialog_id(user_id)
         if active_dialog_id:
             gemini_service.reset_dialog_chat(active_dialog_id)
 
@@ -244,7 +267,7 @@ async def handle_persona_selection(bot: AsyncTeleBot, call: types.CallbackQuery,
 
 async def handle_choose_model_menu(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     user_id = call.from_user.id
-    api_key = db_manager.get_user_api_key(user_id)
+    api_key = await db_manager.get_user_api_key(user_id)
     if not api_key:
         await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('api_key_needed_for_feature', lang_code), show_alert=True)
         return
@@ -260,7 +283,7 @@ async def handle_choose_model_menu(bot: AsyncTeleBot, call: types.CallbackQuery,
         )
         await handle_back_to_main_settings(bot, call, lang_code)
         return
-    current_model = db_manager.get_user_gemini_model(user_id)
+    current_model = await db_manager.get_user_gemini_model(user_id)
     keyboard = mk.create_model_selection_keyboard(models, current_model, lang_code)
     await tg_helpers.edit_message_text_safe(
         bot, call.message.chat.id, call.message.message_id,
@@ -270,8 +293,8 @@ async def handle_choose_model_menu(bot: AsyncTeleBot, call: types.CallbackQuery,
 async def handle_model_selection(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     user_id = call.from_user.id
     model_name = call.data[len(CALLBACK_SETTINGS_MODEL_PREFIX):]
-    db_manager.set_user_gemini_model(user_id, model_name)
-    active_dialog_id = db_manager.get_active_dialog_id(user_id)
+    await db_manager.set_user_gemini_model(user_id, model_name)
+    active_dialog_id = await db_manager.get_active_dialog_id(user_id)
     if active_dialog_id:
         gemini_service.reset_dialog_chat(active_dialog_id)
     await handle_back_to_main_settings(bot, call, lang_code)
@@ -306,9 +329,9 @@ async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.Callback
         try:
             selected_date = datetime.datetime.strptime(selected_date_str, '%Y-%m-%d').date()
             # ИЗМЕНЕНО: получаем историю для активного диалога
-            active_dialog_id = db_manager.get_active_dialog_id(user_id)
+            active_dialog_id = await db_manager.get_active_dialog_id(user_id)
             if active_dialog_id:
-                history = db_manager.get_conversation_history_by_date(active_dialog_id, selected_date)
+                history = await db_manager.get_conversation_history_by_date(active_dialog_id, selected_date)
                 if history:
                     history_text = f"📜 {loc.get_text('history_for_date', lang_code)} {selected_date.strftime('%d.%m.%Y')}:\n\n"
                     for item in history:

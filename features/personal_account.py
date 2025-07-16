@@ -35,7 +35,7 @@ def _get_days_since_start(first_interaction_date_str: Optional[str]) -> str:
 
 async def _get_topic_description(user_id: int, api_key: str, active_dialog_id: int) -> str:
     try:
-        conversation_history_raw = db_manager.get_conversation_history(active_dialog_id, limit=50)
+        conversation_history_raw = await db_manager.get_conversation_history(active_dialog_id, limit=50)
         if not conversation_history_raw:
              return "Пока недостаточно данных для анализа в этом диалоге."
 
@@ -57,13 +57,13 @@ Start the response with 'Чаще всего в этом диалоге вы о�
 
 async def get_personal_account_info(user_id: int) -> str:
     """Собирает и форматирует информацию для личного кабинета пользователя."""
-    user_lang = db_manager.get_user_language(user_id)
-    user_api_key = db_manager.get_user_api_key(user_id)
-    persona_id = db_manager.get_user_persona(user_id)
-    first_interaction_date_str = db_manager.get_first_interaction_date(user_id)
+    user_lang = await db_manager.get_user_language(user_id)
+    user_api_key = await db_manager.get_user_api_key(user_id)
+    persona_id = await db_manager.get_user_persona(user_id)
+    first_interaction_date_str = await db_manager.get_first_interaction_date(user_id)
 
-    active_dialog_id = db_manager.get_active_dialog_id(user_id)
-    conversation_count = db_manager.get_total_user_message_count(user_id)
+    active_dialog_id = await db_manager.get_active_dialog_id(user_id)
+    conversation_count = await db_manager.get_total_user_message_count(user_id)
 
     title: str = _get_user_title(conversation_count)
     days_active: str = _get_days_since_start(first_interaction_date_str)

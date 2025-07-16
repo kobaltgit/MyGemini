@@ -39,14 +39,15 @@ def create_main_keyboard(lang_code: str) -> types.ReplyKeyboardMarkup:
     return markup
 
 
-def create_dialogs_menu_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
+async def create_dialogs_menu_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     """Создает клавиатуру для управления диалогами."""
     markup = types.InlineKeyboardMarkup(row_width=2)
-    lang_code = db_manager.get_user_language(user_id)
-    dialogs = db_manager.get_user_dialogs(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
+    dialogs = await db_manager.get_user_dialogs(user_id)
 
     dialog_buttons = []
     active_dialog_id = None
+    # Диалоги уже содержат active_dialog_id, находим его
     for dialog in dialogs:
         if dialog['dialog_id'] == dialog['active_dialog_id']:
             active_dialog_id = dialog['dialog_id']
@@ -58,9 +59,11 @@ def create_dialogs_menu_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
         callback_data = CALLBACK_IGNORE if is_active else f"{CALLBACK_DIALOG_SWITCH_PREFIX}{dialog['dialog_id']}"
         dialog_buttons.append(types.InlineKeyboardButton(button_text, callback_data=callback_data))
 
+    # Добавляем кнопки диалогов по одной в ряд
     for button in dialog_buttons:
         markup.add(button)
 
+    # Добавляем кнопки управления внизу, если есть активный диалог
     if active_dialog_id:
         control_buttons = [
             types.InlineKeyboardButton(loc.get_text('btn_create_dialog', lang_code), callback_data=CALLBACK_DIALOG_CREATE),
@@ -101,11 +104,11 @@ def create_language_selection_keyboard() -> types.InlineKeyboardMarkup:
     return markup
 
 
-def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
+async def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     """Создает inline-клавиатуру настроек, включая стиль, язык и API ключ."""
     markup = types.InlineKeyboardMarkup(row_width=1)
-    current_style = db_manager.get_user_bot_style(user_id)
-    current_lang = db_manager.get_user_language(user_id)
+    current_style = await db_manager.get_user_bot_style(user_id)
+    current_lang = await db_manager.get_user_language(user_id)
 
     # --- Секция API ключа ---
     markup.add(types.InlineKeyboardButton(loc.get_text('settings_api_key_section', current_lang), callback_data=CALLBACK_IGNORE))
@@ -150,11 +153,11 @@ def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     return markup
 
 
-def create_persona_selection_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
+async def create_persona_selection_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
     """Создает клавиатуру для выбора персоны."""
     markup = types.InlineKeyboardMarkup(row_width=2)
-    lang_code = db_manager.get_user_language(user_id)
-    current_persona_id = db_manager.get_user_persona(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
+    current_persona_id = await db_manager.get_user_persona(user_id)
 
     buttons = []
     for persona_id, persona_data in BOT_PERSONAS.items():

@@ -31,13 +31,16 @@ except Exception as e:
     main_logger.exception(f"Критическая ошибка: Не удалось создать экземпляр бота: {e}", extra={'user_id': 'System'})
     sys.exit(1)
 
-try:
-    main_logger.info("Настройка базы данных...", extra={'user_id': 'System'})
-    db_manager.setup_database()
-    main_logger.info("База данных успешно настроена.", extra={'user_id': 'System'})
-except Exception as e:
-    main_logger.exception("Критическая ошибка: Не удалось настроить базу данных.", extra={'user_id': 'System'})
-    sys.exit(1)
+
+async def setup_db():
+    """Асинхронная функция для настройки базы данных."""
+    try:
+        main_logger.info("Настройка базы данных...", extra={'user_id': 'System'})
+        await db_manager.setup_database()  # ИЗМЕНЕНО: Добавлен await
+        main_logger.info("База данных успешно настроена.", extra={'user_id': 'System'})
+    except Exception as e:
+        main_logger.exception("Критическая ошибка: Не удалось настроить базу данных.", extra={'user_id': 'System'})
+        sys.exit(1)
 
 try:
     main_logger.info("Регистрация обработчиков...", extra={'user_id': 'System'})
@@ -68,6 +71,8 @@ shutdown_event = asyncio.Event()
 async def main():
     """Основная асинхронная функция, управляющая запуском и остановкой."""
     main_logger.info("Запуск основной асинхронной функции main().", extra={'user_id': 'System'})
+
+    await setup_db() # ИЗМЕНЕНО: Вызываем асинхронную настройку БД
 
     # УДАЛЯЕМ вызов initialize_background_tasks
 

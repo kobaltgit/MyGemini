@@ -28,12 +28,12 @@ async def handle_start(message: types.Message, bot: AsyncTeleBot):
     first_name = message.from_user.first_name or "User"
     logger.info(f"Команда /start от user_id: {user_id}", extra={'user_id': str(user_id)})
 
-    db_manager.add_or_update_user(user_id)
-    lang_code = db_manager.get_user_language(user_id)
+    await db_manager.add_or_update_user(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
 
     await bot.delete_state(message.from_user.id, message.chat.id)
     # Сбрасываем кэш активного диалога
-    active_dialog_id = db_manager.get_active_dialog_id(user_id)
+    active_dialog_id = await db_manager.get_active_dialog_id(user_id)
     if active_dialog_id:
         gemini_service.reset_dialog_chat(active_dialog_id)
 
@@ -47,7 +47,7 @@ async def handle_start(message: types.Message, bot: AsyncTeleBot):
 async def handle_help(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /help."""
     user_id = message.chat.id
-    lang_code = db_manager.get_user_language(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
     help_text = loc.get_text('cmd_help_text', lang_code)
     await tg_helpers.send_long_message(
         bot, user_id, help_text,
@@ -58,22 +58,23 @@ async def handle_help(message: types.Message, bot: AsyncTeleBot):
 async def handle_reset(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /reset."""
     user_id = message.chat.id
-    lang_code = db_manager.get_user_language(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
 
     await bot.delete_state(message.from_user.id, message.chat.id)
     # ИЗМЕНЕНО: сбрасываем кэш только для активного диалога
-    active_dialog_id = db_manager.get_active_dialog_id(user_id)
+    active_dialog_id = await db_manager.get_active_dialog_id(user_id)
     if active_dialog_id:
         gemini_service.reset_dialog_chat(active_dialog_id)
 
     reset_text = loc.get_text('cmd_reset_success', lang_code)
-    await bot.reply_to(message, reset_text, reply_markup=mk.create_main_keyboard(lang_code))
+    main_keyboard = mk.create_main_keyboard(lang_code)
+    await bot.reply_to(message, reset_text, reply_markup=main_keyboard)
 
 
 async def handle_set_api_key(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /set_api_key."""
     user_id = message.chat.id
-    lang_code = db_manager.get_user_language(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
 
     text = loc.get_text('set_api_key_prompt', lang_code)
     await bot.set_state(message.from_user.id, STATE_WAITING_FOR_API_KEY, message.chat.id)
@@ -83,7 +84,7 @@ async def handle_set_api_key(message: types.Message, bot: AsyncTeleBot):
 async def handle_history(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /history."""
     user_id = message.chat.id
-    lang_code = db_manager.get_user_language(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
 
     calendar_markup = mk.create_calendar_keyboard()
     text = loc.get_text('history_prompt', lang_code)
@@ -94,8 +95,8 @@ async def handle_history(message: types.Message, bot: AsyncTeleBot):
 async def handle_settings(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /settings."""
     user_id = message.chat.id
-    lang_code = db_manager.get_user_language(user_id)
-    settings_markup = mk.create_settings_keyboard(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
+    settings_markup = await mk.create_settings_keyboard(user_id)
     await bot.send_message(
         user_id, loc.get_text('settings_title', lang_code),
         reply_markup=settings_markup
@@ -105,21 +106,22 @@ async def handle_settings(message: types.Message, bot: AsyncTeleBot):
 async def handle_dialogs(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /dialogs."""
     user_id = message.chat.id
-    lang_code = db_manager.get_user_language(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
 
     text = f"{loc.get_text('dialogs_menu_title', lang_code)}\n\n" \
            f"{loc.get_text('dialogs_menu_desc', lang_code)}"
 
+    dialogs_keyboard = await mk.create_dialogs_menu_keyboard(user_id)
     await bot.send_message(
         user_id,
         text,
-        reply_markup=mk.create_dialogs_menu_keyboard(user_id)
+        reply_markup=dialogs_keyboard
     )
 
 async def handle_translate(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /translate."""
     user_id = message.chat.id
-    lang_code = db_manager.get_user_language(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
 
     lang_markup = mk.create_language_selection_keyboard()
     text = loc.get_text('translate_prompt', lang_code)
@@ -131,26 +133,28 @@ async def handle_personal_account_button(message: types.Message, bot: AsyncTeleB
     user_id = message.chat.id
     await tg_helpers.send_typing_action(bot, user_id)
     info_text = await personal_account.get_personal_account_info(user_id)
-    lang_code = db_manager.get_user_language(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
+    main_keyboard = mk.create_main_keyboard(lang_code)
     await tg_helpers.send_long_message(
         bot, user_id, info_text,
-        reply_markup=mk.create_main_keyboard(lang_code)
+        reply_markup=main_keyboard
     )
 
 
 async def handle_usage(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /usage для отображения статистики расходов."""
     user_id = message.chat.id
-    lang_code = db_manager.get_user_language(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
 
-    if not db_manager.get_user_api_key(user_id):
+    api_key_exists = await db_manager.get_user_api_key(user_id)
+    if not api_key_exists:
         await bot.reply_to(message, loc.get_text('api_key_needed_for_feature', lang_code))
         return
 
-    usage_today = db_manager.get_token_usage_by_period(user_id, 'today')
-    usage_month = db_manager.get_token_usage_by_period(user_id, 'month')
+    usage_today = await db_manager.get_token_usage_by_period(user_id, 'today')
+    usage_month = await db_manager.get_token_usage_by_period(user_id, 'month')
 
-    user_model = db_manager.get_user_gemini_model(user_id) or GEMINI_MODEL_NAME
+    user_model = await db_manager.get_user_gemini_model(user_id) or GEMINI_MODEL_NAME
     pricing = TOKEN_PRICING.get(user_model, TOKEN_PRICING['default'])
 
     def calculate_cost(usage_data):

@@ -4,6 +4,7 @@ import PIL.Image
 from typing import List, Union, Dict, Optional, Any
 from io import BytesIO
 import base64
+from cachetools import LRUCache
 
 from config.settings import GEMINI_MODEL_NAME, GENERATION_CONFIG, SAFETY_SETTINGS, BOT_PERSONAS, BOT_STYLES
 from logger_config import get_logger
@@ -12,7 +13,9 @@ from .error_parser import get_user_friendly_error_key
 
 gemini_logger = get_logger('gemini_api')
 
-dialog_chats_cache: Dict[int, List[Dict[str, Any]]] = {}
+# Кэш для хранения истории диалогов. Ограничен по размеру для предотвращения утечек памяти.
+# maxsize=100 означает, что в памяти будет храниться история 100 последних используемых диалогов.
+dialog_chats_cache: LRUCache = LRUCache(maxsize=100)
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -56,14 +59,14 @@ async def _make_gemini_request_async(api_key: str, url: str, payload: Optional[D
         gemini_logger.exception(f"Неожиданная ошибка при выполнении запроса к Gemini API: {e}", extra={'user_id': 'System'})
         raise GeminiAPIError(f"Неожиданная ошибка: {e}", details={"error": {"message": "unknown_error"}})
 
-def _get_dialog_chat_history(dialog_id: int) -> List[Dict[str, Any]]:
+async def _get_dialog_chat_history(dialog_id: int) -> List[Dict[str, Any]]:
     """
     Возвращает или создает историю чата для диалога из кэша или БД.
     """
     global dialog_chats_cache
     if dialog_id not in dialog_chats_cache:
         gemini_logger.debug(f"Кэш истории для dialog_id: {dialog_id} не найден. Загрузка из БД.")
-        history_from_db = db_manager.get_conversation_history(dialog_id, limit=20)
+        history_from_db = await db_manager.get_conversation_history(dialog_id, limit=20)
         gemini_history = []
         for item in history_from_db:
             role = 'user' if item.get('role') == 'user' else 'model'
@@ -79,12 +82,12 @@ def reset_dialog_chat(dialog_id: int):
         del dialog_chats_cache[dialog_id]
         gemini_logger.info(f"История чата в кэше для dialog_id: {dialog_id} сброшена.")
 
-def _get_system_instruction_text(user_id: int) -> Optional[str]:
+async def _get_system_instruction_text(user_id: int) -> Optional[str]:
     """
     Формирует текст системной инструкции на основе персоны и стиля пользователя.
     """
-    lang_code = db_manager.get_user_language(user_id)
-    persona_id = db_manager.get_user_persona(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
+    persona_id = await db_manager.get_user_persona(user_id)
 
     if persona_id != 'default':
         persona_info = BOT_PERSONAS.get(persona_id, BOT_PERSONAS['default'])
@@ -92,7 +95,7 @@ def _get_system_instruction_text(user_id: int) -> Optional[str]:
         prompt_text = persona_info.get(prompt_key, persona_info.get('prompt_ru', ''))
         return prompt_text.strip() if prompt_text else None
 
-    style_id = db_manager.get_user_bot_style(user_id)
+    style_id = await db_manager.get_user_bot_style(user_id)
     if style_id != 'default':
         style_prompts = {
             'formal': "You must answer in a strictly formal and business-like manner.",
@@ -108,17 +111,17 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
     """
     Генерирует ответ от Gemini, учитывая активный диалог и персону.
     """
-    api_key = db_manager.get_user_api_key(user_id)
+    api_key = await db_manager.get_user_api_key(user_id)
     if not api_key:
         raise GeminiAPIError("API-ключ пользователя не найден.", details={"error": {"message": "API_KEY_NOT_FOUND"}})
 
-    active_dialog_id = db_manager.get_active_dialog_id(user_id)
+    active_dialog_id = await db_manager.get_active_dialog_id(user_id)
     if not active_dialog_id:
         gemini_logger.error(f"У пользователя {user_id} нет активного диалога для генерации ответа.")
         raise GeminiAPIError("Не найден активный диалог. Пожалуйста, перезапустите бота командой /start.", details={})
 
-    history = _get_dialog_chat_history(active_dialog_id)
-    model_name = db_manager.get_user_gemini_model(user_id) or GEMINI_MODEL_NAME
+    history = await _get_dialog_chat_history(active_dialog_id)
+    model_name = await db_manager.get_user_gemini_model(user_id) or GEMINI_MODEL_NAME
 
     gemini_logger.info(f"Генерация ответа для user_id: {user_id}, диалог: {active_dialog_id}, модель: {model_name}", extra={'user_id': str(user_id)})
 
@@ -145,7 +148,7 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
 
     request_contents.append({"role": "user", "parts": user_parts})
 
-    db_manager.store_message(user_id, active_dialog_id, 'user', user_message_for_db)
+    await db_manager.store_message(user_id, active_dialog_id, 'user', user_message_for_db)
 
     url = f"{GEMINI_API_BASE_URL}/models/{model_name}:generateContent"
 
@@ -155,7 +158,7 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
         "safetySettings": SAFETY_SETTINGS
     }
 
-    system_instruction_text = _get_system_instruction_text(user_id)
+    system_instruction_text = await _get_system_instruction_text(user_id)
     if system_instruction_text:
         payload["system_instruction"] = { "parts": [{"text": system_instruction_text}] }
 
@@ -178,7 +181,7 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
         completion_tokens = usage_metadata.get('candidatesTokenCount', 0)
         total_tokens = usage_metadata.get('totalTokenCount', 0)
 
-        db_manager.store_message(
+        await db_manager.store_message(
             user_id=user_id,
             dialog_id=active_dialog_id,
             role='bot',
