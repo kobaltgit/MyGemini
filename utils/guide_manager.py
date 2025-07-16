@@ -21,23 +21,33 @@ def load_guides():
     """
     global _full_guide_ru, _full_guide_en
     
+    # --- Загрузка русской версии ---
     ru_guide_path = os.path.join(GUIDE_DIR, 'full_guide_ru.md')
-    
     try:
         if os.path.exists(ru_guide_path):
             with open(ru_guide_path, 'r', encoding='utf-8') as f:
                 _full_guide_ru = f.read()
             logger.info(f"Справка на русском языке успешно загружена из {ru_guide_path}")
         else:
-            logger.error(f"Файл справки на русском языке не найден по пути: {ru_guide_path}")
-            # В будущем можно сделать это критической ошибкой, чтобы бот не стартовал
+            logger.error(f"Файл справки на русском языке не найден: {ru_guide_path}")
+            # Можно сделать это критической ошибкой, чтобы бот не стартовал
             # raise FileNotFoundError(f"Required guide file not found: {ru_guide_path}")
-            
-        # Здесь можно добавить логику для загрузки _full_guide_en, когда он появится
-
     except Exception as e:
-        logger.exception(f"Произошла ошибка при загрузке файлов справки: {e}")
+        logger.exception(f"Ошибка при загрузке русской справки: {e}")
         raise
+
+    # --- Загрузка английской версии ---
+    en_guide_path = os.path.join(GUIDE_DIR, 'full_guide_en.md')
+    try:
+        if os.path.exists(en_guide_path):
+            with open(en_guide_path, 'r', encoding='utf-8') as f:
+                _full_guide_en = f.read()
+            logger.info(f"Справка на английском языке успешно загружена из {en_guide_path}")
+        else:
+            logger.warning(f"Английская версия справки не найдена: {en_guide_path}. Будет использоваться русская версия по умолчанию.")
+    except Exception as e:
+        # Не выбрасываем исключение, чтобы бот мог работать хотя бы с русской версией
+        logger.exception(f"Ошибка при загрузке английской справки: {e}")
 
 def get_full_guide(lang: str = 'ru') -> str:
     """
@@ -71,10 +81,20 @@ def get_guide_section(section_name: str, lang: str = 'ru') -> str:
     if "не найден" in full_guide:
         return full_guide
 
-    # Используем регулярное выражение для поиска секции
-    # re.DOTALL позволяет точке (.) соответствовать символу новой строки
+    # Определяем теги для поиска в зависимости от языка
+    tag_templates = {
+        'ru': {'start': "НАЧАЛО РАЗДЕЛА", 'end': "КОНЕЦ РАЗДЕЛА"},
+        'en': {'start': "START OF SECTION", 'end': "END OF SECTION"}
+    }
+    
+    # Выбираем нужный язык, с фоллбэком на русский
+    lang_tags = tag_templates.get(lang, tag_templates['ru'])
+    start_tag = lang_tags['start']
+    end_tag = lang_tags['end']
+
+    # Собираем динамическое регулярное выражение
     pattern = re.compile(
-        rf"# \[НАЧАЛО РАЗДЕЛА: {re.escape(section_name.upper())}\](.*?)# \[КОНЕЦ РАЗДЕЛА: {re.escape(section_name.upper())}\]",
+        rf"# \[{re.escape(start_tag)}: {re.escape(section_name.upper())}\](.*?)# \[{re.escape(end_tag)}: {re.escape(section_name.upper())}\]",
         re.DOTALL
     )
     

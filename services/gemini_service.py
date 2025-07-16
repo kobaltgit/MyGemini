@@ -85,7 +85,7 @@ def reset_dialog_chat(dialog_id: int):
 async def _get_system_instruction_text(user_id: int) -> Optional[str]:
     """
     Формирует полный текст системной инструкции, включая персону/стиль
-    и полное руководство по функциям бота.
+    и полное руководство по функциям бота на языке пользователя.
     """
     lang_code = await db_manager.get_user_language(user_id)
     
@@ -96,10 +96,12 @@ async def _get_system_instruction_text(user_id: int) -> Optional[str]:
     if persona_id != 'default':
         persona_info = BOT_PERSONAS.get(persona_id, BOT_PERSONAS['default'])
         prompt_key = f"prompt_{lang_code}"
+        # Фоллбэк на русский, если для выбранного языка нет промпта
         persona_prompt = persona_info.get(prompt_key, persona_info.get('prompt_ru', ''))
     else:
         style_id = await db_manager.get_user_bot_style(user_id)
         if style_id != 'default':
+            # Стили не локализованы, они всегда на английском
             style_prompts = {
                 'formal': "You must answer in a strictly formal and business-like manner.",
                 'informal': "You should communicate in a friendly and informal way.",
@@ -114,15 +116,26 @@ async def _get_system_instruction_text(user_id: int) -> Optional[str]:
     # Удаляем Markdown ссылки с картинками, чтобы не загромождать контекст
     full_guide_text = re.sub(r'!\[.*?\]\(.*?\)', '', full_guide_text)
 
-    guide_prompt_template_ru = f"""
+    # --- Шаблоны промптов для разных языков ---
+    prompt_templates = {
+        'ru': f"""
 ---
 Дополнительный контекст: Ты — Telegram-бот, и у тебя есть встроенные функции, описанные ниже. Используй эту информацию, чтобы отвечать на вопросы пользователя о твоих возможностях, командах или процессе получения API-ключа. Всегда отвечай от первого лица ("Я могу...", "Используй команду /settings...").
 
 {full_guide_text}
 ---
+""",
+        'en': f"""
+---
+Additional context: You are a Telegram bot, and you have built-in features described below. Use this information to answer user questions about your capabilities, commands, or the process of obtaining an API key. Always answer in the first person ("I can...", "Use the /settings command...").
+
+{full_guide_text}
+---
 """
-    # В будущем можно добавить английский шаблон
-    guide_prompt = guide_prompt_template_ru.strip()
+    }
+    
+    # Выбираем шаблон по языку пользователя, с фоллбэком на русский
+    guide_prompt = prompt_templates.get(lang_code, prompt_templates['ru']).strip()
 
     # --- Сборка финального промпта ---
     final_prompt = ""
