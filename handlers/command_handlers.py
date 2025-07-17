@@ -2,6 +2,8 @@
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 
+from config import settings
+
 from . import telegram_helpers as tg_helpers
 from utils import markup_helpers as mk
 from utils import localization as loc
@@ -57,6 +59,11 @@ async def handle_help(message: types.Message, bot: AsyncTeleBot):
         bot, user_id, help_text,
         reply_markup=mk.create_main_keyboard(lang_code, user_id)
     )
+
+    if settings.DONATION_URL:
+        support_markup = mk.create_support_button_markup(lang_code)
+        if support_markup:
+            await bot.send_message(user_id, loc.get_text('support_prompt', lang_code), reply_markup=support_markup)
 
 
 async def handle_reset(message: types.Message, bot: AsyncTeleBot):

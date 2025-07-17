@@ -124,6 +124,9 @@
 
     # Модель Gemini, которую будет использовать бот (опционально)
     GEMINI_MODEL_NAME=gemini-1.5-flash-latest
+
+    # Ссылка для донатов (опционально, если хотите добавить кнопку "Поддержать")
+    DONATION_URL=https://pay.example.com/your_donation_page
     ```
 
 ### Запуск бота

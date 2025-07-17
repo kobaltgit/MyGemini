@@ -12,6 +12,7 @@ if not BOT_TOKEN:
 
 ADMIN_USER_ID_STR = os.getenv("ADMIN_USER_ID")
 ADMIN_USER_ID = int(ADMIN_USER_ID_STR) if ADMIN_USER_ID_STR and ADMIN_USER_ID_STR.isdigit() else None
+DONATION_URL = os.getenv("DONATION_URL")
 
 # --- Gemini API Settings ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

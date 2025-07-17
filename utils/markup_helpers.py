@@ -4,7 +4,7 @@ import datetime
 from typing import List, Optional, Dict, Any
 
 from config.settings import (
-    BOT_STYLES, CALLBACK_ADMIN_EXPORT_USERS, TRANSLATE_LANGUAGES, BOT_PERSONAS, ADMIN_USER_ID,
+    BOT_STYLES, CALLBACK_ADMIN_EXPORT_USERS, DONATION_URL, TRANSLATE_LANGUAGES, BOT_PERSONAS, ADMIN_USER_ID,
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_IGNORE,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX,
     CALLBACK_REPORT_ERROR, CALLBACK_LANG_PREFIX,
@@ -140,6 +140,12 @@ async def create_settings_keyboard(user_id: int) -> types.InlineKeyboardMarkup:
         types.InlineKeyboardButton(f"{'✅ ' if current_lang == 'en' else ''}🇺🇸 English", callback_data=f"{CALLBACK_SETTINGS_LANG_PREFIX}en")
     ]
     markup.add(*lang_buttons)
+    # Добавляем кнопку "Поддержать"
+    if DONATION_URL:
+        markup.add(types.InlineKeyboardButton(
+            loc.get_text('btn_support', current_lang),
+            url=DONATION_URL
+        ))
     return markup
 
 
@@ -239,6 +245,18 @@ def create_error_report_button() -> types.InlineKeyboardMarkup:
     markup.add(btn_report_error)
     return markup
 
+def create_support_button_markup(lang_code: str) -> Optional[types.InlineKeyboardMarkup]:
+    """
+    Создает inline-клавиатуру с кнопкой "Поддержать", если DONATION_URL настроен.
+    """
+    if not DONATION_URL:
+        return None
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton(
+        loc.get_text('btn_support', lang_code),
+        url=DONATION_URL
+    ))
+    return markup
 
 # --- Функции для админ-панели ---
 

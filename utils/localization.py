@@ -96,6 +96,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'feedback_prompt': "Пожалуйста, опишите проблему или ваше предложение. Это сообщение будет отправлено администратору.",
         'feedback_sent': "✅ Спасибо! Ваше сообщение отправлено администратору.",
         'feedback_admin_notification': "⚠️ *Новое сообщение от пользователя!*\n\n*От:* {user_id} (@{username})\n*Имя:* {first_name}\n\n*Сообщение:*\n`{text}`\n\n*Для ответа используйте команду:* `/reply {user_id} `",
+        # --- Поддержка ---
+        'support_prompt': "Если вам нравится бот и вы хотите поддержать его развитие, вы можете сделать небольшой донат:",
         # --- Ошибки ---
         'unsupported_content': "Я пока не умею обрабатывать такой тип контента.",
         'state_wrong_content_type': "Пожалуйста, отправьте текст для завершения текущего действия или нажмите /reset.",
@@ -120,6 +122,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'btn_reset': "🔄 Сброс",
         'btn_usage': "📊 Расходы",
         'btn_admin_panel': "👑 Админ-панель",
+        'btn_support': "❤️ Поддержать автора",
         # --- Секция админа ---
         'admin': {
             'panel_title': "👑 *Админ-панель*",
@@ -275,6 +278,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'feedback_prompt': "Please describe the issue or your suggestion. This message will be sent to the administrator.",
         'feedback_sent': "✅ Thank you! Your message has been sent to the administrator.",
         'feedback_admin_notification': "⚠️ *New message from a user!*\n\n*From:* {user_id} (@{username})\n*Name:* {first_name}\n\n*Message:*\n`{text}`\n\n*To reply, use the command:* `/reply {user_id} `",
+        # --- Support ---
+        'support_prompt': "If you like the bot and wish to support its development, you can make a small donation:",
         # --- Errors ---
         'unsupported_content': "I don't know how to handle this type of content yet.",
         'state_wrong_content_type': "Please send text to complete the current action, or press /reset.",
@@ -299,6 +304,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'btn_reset': "🔄 Reset",
         'btn_usage': "📊 Usage",
         'btn_admin_panel': "👑 Admin Panel",
+        'btn_support': "❤️ Support the Author",
         # --- Admin Section ---
         'admin': {
             'panel_title': "👑 *Admin Panel*",
