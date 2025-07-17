@@ -14,6 +14,27 @@
 [
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)
 ](https://opensource.org/licenses/MIT)
+[
+![aiohttp](https://img.shields.io/badge/aiohttp-3.9.5+-red.svg?style=flat-square)
+](https://docs.aiohttp.org/en/stable/)
+[
+![Cryptography](https://img.shields.io/badge/Cryptography-43.0.0+-gold.svg?style=flat-square)
+](https://github.com/pyca/cryptography)
+[
+![python-dotenv](https://img.shields.io/badge/python--dotenv-1.0.1+-silver.svg?style=flat-square)
+](https://github.com/theskumar/python-dotenv)
+[
+![PyYAML](https://img.shields.io/badge/PyYAML-6.0.1+-indigo.svg?style=flat-square)
+](https://pyyaml.org/)
+[
+![SQLite3](https://img.shields.io/badge/SQLite-3-magenta.svg?style=flat-square)
+](https://www.sqlite.org/index.html)
+[
+![Pillow](https://img.shields.io/badge/Pillow-10.3.0+-darkgreen.svg?style=flat-square)
+](https://python-pillow.org/)
+[
+![cachetools](https://img.shields.io/badge/cachetools-5.3.3+-brown.svg?style=flat-square)
+](https://github.com/tkem/cachetools)
 
 
 
