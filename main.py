@@ -16,8 +16,8 @@ guide_manager.load_guides()
 try:
     from config import settings
     from database import db_manager
-    # УДАЛЯЕМ импорт features.reminders
-    from handlers import command_handlers, callback_handlers, message_handlers
+    # Импортируем новый модуль admin_handlers
+    from handlers import command_handlers, callback_handlers, message_handlers, admin_handlers
     from services import gemini_service
 except ImportError as e:
     main_logger.exception(f"Критическая ошибка: Не удалось импортировать необходимые модули: {e}", extra={'user_id': 'System'})
@@ -39,7 +39,7 @@ async def setup_db():
     """Асинхронная функция для настройки базы данных."""
     try:
         main_logger.info("Настройка базы данных...", extra={'user_id': 'System'})
-        await db_manager.setup_database()  # ИЗМЕНЕНО: Добавлен await
+        await db_manager.setup_database()
         main_logger.info("База данных успешно настроена.", extra={'user_id': 'System'})
     except Exception as e:
         main_logger.exception("Критическая ошибка: Не удалось настроить базу данных.", extra={'user_id': 'System'})
@@ -47,6 +47,9 @@ async def setup_db():
 
 try:
     main_logger.info("Регистрация обработчиков...", extra={'user_id': 'System'})
+    # Регистрируем админские обработчики
+    admin_handlers.register_admin_handlers(bot)
+    # Регистрируем остальные
     command_handlers.register_command_handlers(bot)
     callback_handlers.register_callback_handlers(bot)
     message_handlers.register_message_handlers(bot)
@@ -55,7 +58,6 @@ except Exception as e:
     main_logger.exception("Критическая ошибка: Не удалось зарегистрировать обработчики.", extra={'user_id': 'System'})
     sys.exit(1)
 
-# УДАЛЯЕМ всю функцию initialize_background_tasks, так как она больше не нужна
 
 async def run_bot_polling(bot_instance: AsyncTeleBot):
     """Запускает основной цикл опроса Telegram (polling)."""
@@ -75,15 +77,11 @@ async def main():
     """Основная асинхронная функция, управляющая запуском и остановкой."""
     main_logger.info("Запуск основной асинхронной функции main().", extra={'user_id': 'System'})
 
-    await setup_db() # ИЗМЕНЕНО: Вызываем асинхронную настройку БД
-
-    # УДАЛЯЕМ вызов initialize_background_tasks
+    await setup_db()
 
     polling_task = asyncio.create_task(run_bot_polling(bot))
     await shutdown_event.wait()
     main_logger.warning("Начало процесса graceful shutdown...", extra={'user_id': 'System'})
-
-    # УДАЛЯЕМ остановку планировщика
 
     main_logger.info("Отмена задачи поллинга...", extra={'user_id': 'System'})
     polling_task.cancel()
@@ -120,7 +118,6 @@ if __name__ == '__main__':
         main_logger.info("Завершение работы по KeyboardInterrupt (до запуска main loop).", extra={'user_id': 'System'})
     except Exception as e:
         main_logger.exception("Необработанная критическая ошибка на верхнем уровне.", extra={'user_id': 'System'})
-        # УДАЛЯЕМ вызов shutdown_scheduler
         sys.exit(1)
     finally:
         main_logger.info("Работа бота завершена.", extra={'user_id': 'System'})

@@ -12,10 +12,12 @@ from utils import localization as loc
 from config.settings import (
     STATE_WAITING_FOR_TRANSLATE_TEXT,
     STATE_WAITING_FOR_API_KEY,
-    STATE_WAITING_FOR_NEW_DIALOG_NAME, # Импорт состояний
+    STATE_WAITING_FOR_NEW_DIALOG_NAME, 
     STATE_WAITING_FOR_RENAME_DIALOG,
+    STATE_WAITING_FOR_FEEDBACK, # <-- Новый импорт
     GEMINI_MODEL_NAME,
-    BOT_PERSONAS
+    BOT_PERSONAS,
+    ADMIN_USER_ID
 )
 from database import db_manager
 from services import gemini_service
@@ -26,7 +28,26 @@ from logger_config import get_logger
 logger = get_logger(__name__)
 user_logger = get_logger('user_messages')
 
-# НОВАЯ ФУНКЦИЯ для создания заголовка
+
+async def _check_access(bot: AsyncTeleBot, user_id: int, lang_code: str) -> bool:
+    """
+    Проверяет, имеет ли пользователь доступ к боту.
+    Возвращает False, если доступ запрещен (блокировка или режим обслуживания).
+    """
+    # 1. Проверка на блокировку пользователя
+    if await db_manager.is_user_blocked(user_id):
+        await bot.send_message(user_id, loc.get_text('user_is_blocked', lang_code))
+        return False
+
+    # 2. Проверка на режим обслуживания (для всех, кроме админа)
+    maintenance_mode_str = await db_manager.get_app_setting('maintenance_mode')
+    if maintenance_mode_str == 'true' and user_id != ADMIN_USER_ID:
+        await bot.send_message(user_id, loc.get_text('maintenance_mode_on', lang_code))
+        return False
+
+    return True
+
+
 async def _create_context_header(user_id: int, lang_code: str) -> str:
     """Создает текстовый заголовок с информацией о текущем контексте."""
     context_info = await db_manager.get_user_context_info(user_id)
@@ -48,6 +69,7 @@ async def _create_context_header(user_id: int, lang_code: str) -> str:
     )
     return header
 
+
 async def handle_any_message(message: types.Message, bot: AsyncTeleBot):
     """
     Обрабатывает любое входящее сообщение (текст или фото).
@@ -57,6 +79,12 @@ async def handle_any_message(message: types.Message, bot: AsyncTeleBot):
 
     user_logger.info(f"Получено сообщение ({content_type}) от user ID: {user_id}", extra={'user_id': str(user_id)})
     await db_manager.add_or_update_user(user_id)
+    lang_code = await db_manager.get_user_language(user_id)
+
+    # Централизованная проверка доступа
+    if not await _check_access(bot, user_id, lang_code):
+        return
+
     current_state = await bot.get_state(message.from_user.id, message.chat.id)
 
     try:
@@ -67,10 +95,8 @@ async def handle_any_message(message: types.Message, bot: AsyncTeleBot):
         elif content_type == 'photo':
             await handle_photo_message(bot, message)
         else:
-            lang_code = await db_manager.get_user_language(user_id)
             await bot.reply_to(message, loc.get_text('unsupported_content', lang_code))
     except GeminiAPIError as e:
-        lang_code = await db_manager.get_user_language(user_id)
         user_friendly_error = loc.get_text(e.error_key, lang_code)
         await tg_helpers.send_long_message(bot, user_id, user_friendly_error)
     except Exception as e:
@@ -91,6 +117,7 @@ async def handle_stateful_message(bot: AsyncTeleBot, message: types.Message, cur
         STATE_WAITING_FOR_TRANSLATE_TEXT: handle_state_translate,
         STATE_WAITING_FOR_NEW_DIALOG_NAME: handle_state_new_dialog_name,
         STATE_WAITING_FOR_RENAME_DIALOG: handle_state_rename_dialog,
+        STATE_WAITING_FOR_FEEDBACK: handle_state_feedback, # <-- Новый обработчик
     }
     handler = state_handlers.get(current_state)
     if handler:
@@ -118,10 +145,12 @@ async def handle_state_api_key(bot: AsyncTeleBot, message: types.Message):
         await db_manager.set_user_api_key(user_id, api_key)
         await bot.delete_state(message.from_user.id, message.chat.id)
         text = loc.get_text('api_key_success', lang_code)
-        await bot.send_message(user_id, text, reply_markup=mk.create_main_keyboard(lang_code))
+        # ИЗМЕНЕНИЕ: передаем user_id для создания клавиатуры
+        await bot.send_message(user_id, text, reply_markup=mk.create_main_keyboard(lang_code, user_id))
     else:
         text = loc.get_text('api_key_invalid', lang_code)
         await bot.send_message(user_id, text)
+
 
 async def handle_state_translate(bot: AsyncTeleBot, message: types.Message):
     user_id = message.chat.id
@@ -143,6 +172,7 @@ async def handle_state_translate(bot: AsyncTeleBot, message: types.Message):
     if translated_text:
         await bot.reply_to(message, translated_text)
     await bot.delete_state(user_id, message.chat.id)
+
 
 async def handle_state_new_dialog_name(bot: AsyncTeleBot, message: types.Message):
     """Обрабатывает ввод названия нового диалога."""
@@ -169,6 +199,7 @@ async def handle_state_new_dialog_name(bot: AsyncTeleBot, message: types.Message
         reply_markup=dialog_keyboard
     )
 
+
 async def handle_state_rename_dialog(bot: AsyncTeleBot, message: types.Message):
     """Обрабатывает ввод нового названия для диалога."""
     user_id = message.chat.id
@@ -188,7 +219,8 @@ async def handle_state_rename_dialog(bot: AsyncTeleBot, message: types.Message):
     if dialog_id_to_rename:
         await db_manager.rename_dialog(dialog_id_to_rename, new_name)
         await bot.delete_state(user_id, message.chat.id)
-        await bot.send_message(user_id, loc.get_text('renamed_success', lang_code).format(new_name=new_name))
+        # Ошибка в ключе локализации: должно быть dialog_renamed_success
+        await bot.send_message(user_id, loc.get_text('dialog_renamed_success', lang_code).format(new_name=new_name))
         
         dialog_keyboard = await mk.create_dialogs_menu_keyboard(user_id)
         await bot.send_message(
@@ -198,6 +230,27 @@ async def handle_state_rename_dialog(bot: AsyncTeleBot, message: types.Message):
     else:
         logger.error(f"Не найден dialog_id_to_rename в состоянии у {user_id}", extra={'user_id': str(user_id)})
         await bot.delete_state(user_id, message.chat.id)
+
+
+async def handle_state_feedback(bot: AsyncTeleBot, message: types.Message):
+    """Обрабатывает сообщение от пользователя в состоянии 'ожидание обратной связи'."""
+    user_id = message.chat.id
+    lang_code = await db_manager.get_user_language(user_id)
+    
+    await bot.delete_state(user_id, message.chat.id)
+    await bot.send_message(user_id, loc.get_text('feedback_sent', lang_code))
+    
+    if ADMIN_USER_ID:
+        try:
+            admin_notification = loc.get_text('feedback_admin_notification', 'ru').format(
+                user_id=user_id,
+                username=message.from_user.username or 'N/A',
+                first_name=message.from_user.first_name or 'N/A',
+                text=message.text
+            )
+            await bot.send_message(ADMIN_USER_ID, admin_notification, parse_mode='Markdown')
+        except Exception as e:
+            logger.error(f"Не удалось отправить уведомление о фидбэке администратору: {e}", extra={'user_id': 'System'})
 
 # --- Основные обработчики ---
 
@@ -213,6 +266,7 @@ async def handle_general_text_query(bot: AsyncTeleBot, message: types.Message):
     response = await gemini_service.generate_response(user_id, message.text)
     header = await _create_context_header(user_id, lang_code)
     await tg_helpers.send_long_message(bot, user_id, f"{header}\n\n{response}")
+
 
 async def handle_photo_message(bot: AsyncTeleBot, message: types.Message):
     """Обрабатывает запрос к Gemini с изображением."""
@@ -231,6 +285,7 @@ async def handle_photo_message(bot: AsyncTeleBot, message: types.Message):
     response = await gemini_service.generate_response(user_id, prompt)
     header = await _create_context_header(user_id, lang_code)
     await tg_helpers.send_long_message(bot, user_id, f"{header}\n\n{response}")
+
 
 def register_message_handlers(bot: AsyncTeleBot):
     """Регистрирует универсальный обработчик для текстовых сообщений и фото."""

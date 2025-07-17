@@ -4,16 +4,19 @@ import datetime
 from typing import List, Optional, Dict, Any
 
 from config.settings import (
-    BOT_STYLES, TRANSLATE_LANGUAGES, BOT_PERSONAS,
+    BOT_STYLES, TRANSLATE_LANGUAGES, BOT_PERSONAS, ADMIN_USER_ID,
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_IGNORE,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX,
     CALLBACK_REPORT_ERROR, CALLBACK_LANG_PREFIX,
     CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY,
     CALLBACK_SETTINGS_CHOOSE_MODEL_MENU, CALLBACK_SETTINGS_MODEL_PREFIX, CALLBACK_SETTINGS_BACK_TO_MAIN,
     CALLBACK_SETTINGS_PERSONA_MENU, CALLBACK_SETTINGS_PERSONA_PREFIX,
-    # НОВЫЕ ИМПОРТЫ ДЛЯ ДИАЛОГОВ
+    # Dialogs
     CALLBACK_DIALOGS_MENU, CALLBACK_DIALOG_SWITCH_PREFIX, CALLBACK_DIALOG_RENAME_PREFIX,
-    CALLBACK_DIALOG_DELETE_PREFIX, CALLBACK_DIALOG_CREATE, CALLBACK_DIALOG_CONFIRM_DELETE_PREFIX
+    CALLBACK_DIALOG_DELETE_PREFIX, CALLBACK_DIALOG_CREATE, CALLBACK_DIALOG_CONFIRM_DELETE_PREFIX,
+    # Admin Panel
+    CALLBACK_ADMIN_MAIN_MENU, CALLBACK_ADMIN_STATS_MENU, CALLBACK_ADMIN_COMMUNICATION_MENU,
+    CALLBACK_ADMIN_USER_MANAGEMENT_MENU, CALLBACK_ADMIN_TOGGLE_MAINTENANCE
 )
 from database import db_manager
 from logger_config import get_logger
@@ -21,10 +24,12 @@ from . import localization as loc
 
 logger = get_logger('markup_helpers')
 
-def create_main_keyboard(lang_code: str) -> types.ReplyKeyboardMarkup:
-    """Создает основную клавиатуру с кнопками команд на основе языка пользователя."""
+
+def create_main_keyboard(lang_code: str, user_id: int) -> types.ReplyKeyboardMarkup:
+    """Создает основную клавиатуру с кнопками команд на основе языка и ID пользователя."""
     markup = types.ReplyKeyboardMarkup(row_width=3, resize_keyboard=True)
 
+    # Стандартные кнопки для всех
     buttons = [
         types.KeyboardButton(loc.get_text('btn_dialogs', lang_code)),
         types.KeyboardButton(loc.get_text('btn_account', lang_code)),
@@ -35,6 +40,13 @@ def create_main_keyboard(lang_code: str) -> types.ReplyKeyboardMarkup:
         types.KeyboardButton(loc.get_text('btn_help', lang_code)),
         types.KeyboardButton(loc.get_text('btn_reset', lang_code)),
     ]
+
+    # Добавляем админ-кнопку, если ID совпадает
+    if user_id == ADMIN_USER_ID:
+        admin_button = types.KeyboardButton(loc.get_text('btn_admin_panel', lang_code))
+        # Вставляем админ-кнопку в начало для быстрого доступа
+        buttons.insert(0, admin_button)
+
     markup.add(*buttons)
     return markup
 
@@ -259,4 +271,59 @@ def create_error_report_button() -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup()
     btn_report_error = types.InlineKeyboardButton('🆘 Сообщить об ошибке / Report Error', callback_data=CALLBACK_REPORT_ERROR)
     markup.add(btn_report_error)
+    return markup
+
+
+# --- НОВЫЕ ФУНКЦИИ ДЛЯ АДМИН-ПАНЕЛИ ---
+
+async def create_admin_main_menu_keyboard(lang_code: str) -> types.InlineKeyboardMarkup:
+    """Создает главное меню админ-панели."""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    stats_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_stats', lang_code),
+        callback_data=CALLBACK_ADMIN_STATS_MENU
+    )
+    comm_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_communication', lang_code),
+        callback_data=CALLBACK_ADMIN_COMMUNICATION_MENU
+    )
+    user_mgmt_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_user_management', lang_code),
+        callback_data=CALLBACK_ADMIN_USER_MANAGEMENT_MENU
+    )
+    # Используем временный callback 'admin_maintenance'
+    maintenance_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_maintenance', lang_code),
+        callback_data='admin_maintenance'
+    )
+    markup.add(stats_btn, comm_btn)
+    markup.add(user_mgmt_btn, maintenance_btn)
+    return markup
+
+
+async def create_maintenance_menu_keyboard(lang_code: str) -> types.InlineKeyboardMarkup:
+    """Создает клавиатуру для управления режимом обслуживания."""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    maintenance_mode_str = await db_manager.get_app_setting('maintenance_mode')
+    is_on = maintenance_mode_str == 'true'
+
+    status_text = loc.get_text('admin.maintenance_status_on', lang_code) if is_on else loc.get_text('admin.maintenance_status_off', lang_code)
+    markup.add(types.InlineKeyboardButton(status_text, callback_data=CALLBACK_IGNORE))
+
+    if is_on:
+        toggle_btn = types.InlineKeyboardButton(
+            loc.get_text('admin.btn_maintenance_disable', lang_code),
+            callback_data=f"{CALLBACK_ADMIN_TOGGLE_MAINTENANCE}:off"
+        )
+    else:
+        toggle_btn = types.InlineKeyboardButton(
+            loc.get_text('admin.btn_maintenance_enable', lang_code),
+            callback_data=f"{CALLBACK_ADMIN_TOGGLE_MAINTENANCE}:on"
+        )
+    markup.add(toggle_btn)
+
+    markup.add(types.InlineKeyboardButton(
+        loc.get_text('admin.btn_back_to_admin_menu', lang_code),
+        callback_data=CALLBACK_ADMIN_MAIN_MENU
+    ))
     return markup

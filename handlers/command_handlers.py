@@ -12,7 +12,7 @@ from config.settings import (
     STATE_WAITING_FOR_API_KEY,
     TOKEN_PRICING,
     GEMINI_MODEL_NAME,
-    STATE_WAITING_FOR_NEW_DIALOG_NAME, # Импорт состояний
+    STATE_WAITING_FOR_NEW_DIALOG_NAME, 
     STATE_WAITING_FOR_RENAME_DIALOG
 )
 from database import db_manager
@@ -33,7 +33,7 @@ async def handle_start(message: types.Message, bot: AsyncTeleBot):
     lang_code = await db_manager.get_user_language(user_id)
 
     await bot.delete_state(message.from_user.id, message.chat.id)
-    # Сбрасываем кэш активного диалога
+    
     active_dialog_id = await db_manager.get_active_dialog_id(user_id)
     if active_dialog_id:
         gemini_service.reset_dialog_chat(active_dialog_id)
@@ -41,7 +41,7 @@ async def handle_start(message: types.Message, bot: AsyncTeleBot):
     welcome_text = loc.get_text('welcome', lang_code).format(name=first_name)
     await tg_helpers.send_long_message(
         bot, user_id, welcome_text,
-        reply_markup=mk.create_main_keyboard(lang_code)
+        reply_markup=mk.create_main_keyboard(lang_code, user_id) # ИЗМЕНЕНИЕ
     )
 
 
@@ -52,7 +52,7 @@ async def handle_help(message: types.Message, bot: AsyncTeleBot):
     help_text = loc.get_text('cmd_help_text', lang_code)
     await tg_helpers.send_long_message(
         bot, user_id, help_text,
-        reply_markup=mk.create_main_keyboard(lang_code)
+        reply_markup=mk.create_main_keyboard(lang_code, user_id) # ИЗМЕНЕНИЕ
     )
 
 
@@ -62,13 +62,13 @@ async def handle_reset(message: types.Message, bot: AsyncTeleBot):
     lang_code = await db_manager.get_user_language(user_id)
 
     await bot.delete_state(message.from_user.id, message.chat.id)
-    # ИЗМЕНЕНО: сбрасываем кэш только для активного диалога
+    
     active_dialog_id = await db_manager.get_active_dialog_id(user_id)
     if active_dialog_id:
         gemini_service.reset_dialog_chat(active_dialog_id)
 
     reset_text = loc.get_text('cmd_reset_success', lang_code)
-    main_keyboard = mk.create_main_keyboard(lang_code)
+    main_keyboard = mk.create_main_keyboard(lang_code, user_id) # ИЗМЕНЕНИЕ
     await bot.reply_to(message, reset_text, reply_markup=main_keyboard)
 
 
@@ -103,7 +103,7 @@ async def handle_settings(message: types.Message, bot: AsyncTeleBot):
         reply_markup=settings_markup
     )
 
-# НОВЫЙ ОБРАБОТЧИК
+
 async def handle_dialogs(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /dialogs."""
     user_id = message.chat.id
@@ -135,7 +135,7 @@ async def handle_personal_account_button(message: types.Message, bot: AsyncTeleB
     await tg_helpers.send_typing_action(bot, user_id)
     info_text = await personal_account.get_personal_account_info(user_id)
     lang_code = await db_manager.get_user_language(user_id)
-    main_keyboard = mk.create_main_keyboard(lang_code)
+    main_keyboard = mk.create_main_keyboard(lang_code, user_id) # ИЗМЕНЕНИЕ
     await tg_helpers.send_long_message(
         bot, user_id, info_text,
         reply_markup=main_keyboard
@@ -192,14 +192,12 @@ async def handle_usage(message: types.Message, bot: AsyncTeleBot):
     report_text += loc.get_text('usage_cost_notice', lang_code)
     await bot.send_message(user_id, report_text, parse_mode='Markdown')
 
-# --- НОВЫЕ ОБРАБОТЧИКИ ДЛЯ СПРАВКИ ---
 
 async def handle_full_guide(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /help_guide, отправляет полную справку."""
     user_id = message.chat.id
     lang_code = await db_manager.get_user_language(user_id)
     
-    # Отправляем typing action, так как отправка может занять время
     await tg_helpers.send_typing_action(bot, user_id)
     
     guide_text = guide_manager.get_full_guide(lang_code)
@@ -221,10 +219,8 @@ def register_command_handlers(bot: AsyncTeleBot):
     bot.register_message_handler(handle_start, commands=['start'], pass_bot=True)
     bot.register_message_handler(handle_help, commands=['help'], pass_bot=True)
 
-    # --- НОВЫЕ КОМАНДЫ ---
     bot.register_message_handler(handle_full_guide, commands=['help_guide', 'guide'], pass_bot=True)
     bot.register_message_handler(handle_api_key_info, commands=['apikey_info', 'key_info'], pass_bot=True)
-    # ---------------------
 
     bot.register_message_handler(handle_reset, commands=['reset'], pass_bot=True)
     bot.register_message_handler(handle_set_api_key, commands=['set_api_key', 'setapikey'], pass_bot=True)
@@ -232,7 +228,7 @@ def register_command_handlers(bot: AsyncTeleBot):
     bot.register_message_handler(handle_history, commands=['history'], pass_bot=True)
     bot.register_message_handler(handle_translate, commands=['translate'], pass_bot=True)
     bot.register_message_handler(handle_usage, commands=['usage'], pass_bot=True)
-    bot.register_message_handler(handle_dialogs, commands=['dialogs'], pass_bot=True) # РЕГИСТРАЦИЯ КОМАНДЫ
+    bot.register_message_handler(handle_dialogs, commands=['dialogs'], pass_bot=True)
 
     # Регистрация кнопок-синонимов
     bot.register_message_handler(handle_dialogs,
