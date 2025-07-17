@@ -17,7 +17,7 @@ try:
     from config import settings
     from database import db_manager
     # Импортируем новый модуль admin_handlers
-    from handlers import command_handlers, callback_handlers, message_handlers, admin_handlers
+    from handlers import command_handlers, callback_handlers, message_handlers, admin_handlers, telegram_helpers
     from services import gemini_service
 except ImportError as e:
     main_logger.exception(f"Критическая ошибка: Не удалось импортировать необходимые модули: {e}", extra={'user_id': 'System'})
@@ -29,6 +29,7 @@ except Exception as e:
 try:
     state_storage = StateMemoryStorage()
     bot = AsyncTeleBot(settings.BOT_TOKEN, state_storage=state_storage, parse_mode='Markdown')
+    telegram_helpers.register_bot_instance(bot)
     main_logger.info("Экземпляр AsyncTeleBot создан.", extra={'user_id': 'System'})
 except Exception as e:
     main_logger.exception(f"Критическая ошибка: Не удалось создать экземпляр бота: {e}", extra={'user_id': 'System'})

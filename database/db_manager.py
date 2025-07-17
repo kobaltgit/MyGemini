@@ -7,6 +7,7 @@ from typing import List, Tuple, Optional, Dict, Any
 from logger_config import get_logger
 from config.settings import DATABASE_NAME
 from utils import crypto_helpers
+from handlers import telegram_helpers as tg_helpers
 
 db_logger = get_logger('database', user_id='System')
 db_lock = asyncio.Lock()  # Используем asyncio.Lock
@@ -246,7 +247,12 @@ async def add_or_update_user(user_id: int, username: Optional[str], first_name: 
     """
     user_data = await _execute_query("SELECT user_id, active_dialog_id FROM users WHERE user_id = ?", (user_id,), fetch_one=True)
 
+    # ВРЕМЕННЫЙ ЛОГ 1
+    db_logger.info(f"[DEBUG] Проверка пользователя {user_id}. Найден в БД: {'Да' if user_data else 'Нет'}")
+
     if not user_data:
+        # ВРЕМЕННЫЙ ЛОГ 2
+        db_logger.info(f"[DEBUG] Пользователь {user_id} определен как новый. Вызываю уведомление.")
         db_logger.info(f"Добавляем нового пользователя {user_id} (@{username}).")
         today_date_str = datetime.date.today().strftime('%Y-%m-%d')
         query_insert_user = """
@@ -255,6 +261,8 @@ async def add_or_update_user(user_id: int, username: Optional[str], first_name: 
         """
         params = (user_id, username, first_name, last_name, today_date_str)
         await _execute_query(query_insert_user, params, is_write_operation=True)
+        # Отправка уведомления администратору
+        await tg_helpers.notify_admin_of_new_user(user_id, username, first_name, last_name)
         # Создаем диалог по умолчанию для нового пользователя
         await create_dialog(user_id, "Основной диалог", set_active=True)
     else:

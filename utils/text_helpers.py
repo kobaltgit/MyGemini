@@ -84,3 +84,22 @@ def is_url(text: str) -> bool:
         return bool(result.scheme and result.netloc and '.' in result.netloc)
     except ValueError: # urlparse может вызвать ValueError на очень странных строках
         return False
+
+def escape_markdown(text: str, version: int = 2) -> str:
+    """
+    Экранирует специальные символы в тексте для безопасной отправки
+    в Telegram с parse_mode='MarkdownV2'.
+    """
+    if not isinstance(text, str):
+        return ""
+    if version == 1:
+        # Для старого Markdown, если понадобится
+        escape_chars = r'_*`['
+    elif version == 2:
+        # Для MarkdownV2, который мы используем
+        escape_chars = r'_*[]()~`>#+-=|{}.!'
+    else:
+        raise ValueError("Only Markdown versions 1 and 2 are supported.")
+
+    # Экранируем только символы из списка
+    return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", text)

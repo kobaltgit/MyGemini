@@ -3,6 +3,7 @@
 Модуль со вспомогательными функциями для взаимодействия с Telegram API.
 """
 import asyncio
+from typing import Optional
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 from telebot import apihelper
@@ -19,6 +20,13 @@ from database import db_manager   # <-- НОВЫЙ ИМПОРТ
 # Получаем логгер для этого модуля
 logger = get_logger(__name__)
 
+_bot_instance: Optional[AsyncTeleBot] = None
+
+def register_bot_instance(bot: AsyncTeleBot):
+    """Регистрирует глобальный экземпляр бота для использования в хелперах."""
+    global _bot_instance
+    _bot_instance = bot
+    logger.info("Экземпляр бота зарегистрирован в telegram_helpers.")
 
 # --- Функции для отправки сообщений ---
 
@@ -163,3 +171,34 @@ async def get_user_info_text(user_id_to_check: int, lang_code: str) -> str:
                  f"*{loc.get_text('admin.user_info_messages', lang_code)}* `{user_info['message_count']}`\n"
                  f"*{loc.get_text('admin.user_info_status', lang_code)}* {status}")
     return info_text
+
+async def notify_admin_of_new_user(user_id: int, username: Optional[str], first_name: Optional[str], last_name: Optional[str]):
+    """Отправляет уведомление администратору о регистрации нового пользователя."""
+    # ВРЕМЕННЫЙ ЛОГ 3
+    logger.info(f"[DEBUG] Вызвана функция notify_admin_of_new_user для {user_id}. ADMIN_ID: {ADMIN_USER_ID}, Bot_Instance_Exists: {bool(_bot_instance)}")
+    if not ADMIN_USER_ID or not _bot_instance:
+        return
+
+    try:
+        # Формируем сообщение
+        user_info_parts = [
+            f"👤 *Новый пользователь зарегистрирован\\!*",
+            f"*ID:* `{user_id}`"
+        ]
+        if username:
+            user_info_parts.append(f"*Username:* @{th.escape_markdown(username)}")
+        if first_name:
+            safe_first_name = th.escape_markdown(first_name)
+            user_info_parts.append(f"*Имя:* `{safe_first_name}`")
+        if last_name:
+            safe_last_name = th.escape_markdown(last_name)
+            user_info_parts.append(f"*Фамилия:* `{safe_last_name}`")
+
+        text = "\n".join(user_info_parts)
+
+        # Отправляем сообщение админу
+        await _bot_instance.send_message(ADMIN_USER_ID, text, parse_mode='MarkdownV2')
+        logger.info(f"Администратор уведомлен о новом пользователе {user_id}", extra={'user_id': 'System'})
+
+    except Exception as e:
+        logger.error(f"Не удалось отправить уведомление администратору о новом пользователе {user_id}: {e}", extra={'user_id': 'System'})
