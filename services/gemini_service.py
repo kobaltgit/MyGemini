@@ -1,4 +1,5 @@
 # File: services/gemini_service.py
+import asyncio
 import aiohttp
 import PIL.Image
 from typing import List, Union, Dict, Optional, Any
@@ -34,32 +35,67 @@ async def _make_gemini_request_async(api_key: str, url: str, payload: Optional[D
     """
     Выполняет универсальный асинхронный HTTP-запрос к Gemini API.
     В случае ошибки выбрасывает GeminiAPIError.
+    Реализует механизм повторных попыток для временных ошибок.
     """
     headers = {'Content-Type': 'application/json'}
     params = {'key': api_key}
 
-    try:
-        async with aiohttp.ClientSession() as session:
-            request_args = {'params': params, 'headers': headers}
-            if payload:
-                request_args['json'] = payload
+    # --- НОВЫЙ БЛОК: Настройки для повторных попыток ---
+    max_retries = 3
+    retry_delay = 2  # задержка в секундах
 
-            async with session.request(method, url, **request_args) as response:
-                response_json = await response.json()
-                if response.status != 200:
-                    error_details = response_json.get('error', {})
-                    error_message = error_details.get('message', 'Неизвестная ошибка API')
-                    gemini_logger.error(f"Ошибка API Gemini (HTTP {response.status}): {response_json}", extra={'user_id': 'System'})
-                    raise GeminiAPIError(error_message, details=error_details)
-                return response_json
-    except aiohttp.ClientError as e:
-        gemini_logger.exception(f"Сетевая ошибка при запросе к Gemini API: {e}", extra={'user_id': 'System'})
-        raise GeminiAPIError("Сетевая ошибка при подключении к сервису.", details={"error": {"message": "service_unavailable"}})
-    except GeminiAPIError:
-        raise
-    except Exception as e:
-        gemini_logger.exception(f"Неожиданная ошибка при выполнении запроса к Gemini API: {e}", extra={'user_id': 'System'})
-        raise GeminiAPIError(f"Неожиданная ошибка: {e}", details={"error": {"message": "unknown_error"}})
+    for attempt in range(max_retries):
+        try:
+            async with aiohttp.ClientSession() as session:
+                request_args = {'params': params, 'headers': headers, 'timeout': aiohttp.ClientTimeout(total=60)}
+                if payload:
+                    request_args['json'] = payload
+
+                async with session.request(method, url, **request_args) as response:
+                    response_json = await response.json()
+                    if response.status != 200:
+                        error_details = response_json.get('error', {})
+                        error_message = error_details.get('message', 'Неизвестная ошибка API')
+
+                        # --- НОВЫЙ БЛОК: Логика повторных попыток ---
+                        # Повторяем только для ошибок 5xx (проблемы на сервере) и 429 (превышение квот)
+                        if response.status >= 500 or response.status == 429:
+                            if attempt < max_retries - 1:
+                                gemini_logger.warning(
+                                    f"Попытка {attempt + 1}/{max_retries}: "
+                                    f"Получена временная ошибка (HTTP {response.status}). "
+                                    f"Повтор через {retry_delay} сек. Ошибка: {error_message}",
+                                    extra={'user_id': 'System'}
+                                )
+                                await asyncio.sleep(retry_delay)
+                                continue # Переходим к следующей попытке
+
+                        # Если ошибка не временная или попытки закончились, выбрасываем исключение
+                        gemini_logger.error(f"Ошибка API Gemini (HTTP {response.status}): {response_json}", extra={'user_id': 'System'})
+                        raise GeminiAPIError(error_message, details=error_details)
+
+                    return response_json # Успешный ответ
+
+        except aiohttp.ClientError as e:
+            gemini_logger.exception(f"Сетевая ошибка при запросе к Gemini API: {e}", extra={'user_id': 'System'})
+            # Для сетевых ошибок тоже можно попробовать повторить
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            raise GeminiAPIError("Сетевая ошибка при подключении к сервису.", details={"error": {"message": "service_unavailable"}})
+        except GeminiAPIError:
+            # Пробрасываем "фатальные" ошибки API без повторных попыток
+            raise
+        except Exception as e:
+            gemini_logger.exception(f"Неожиданная ошибка при выполнении запроса к Gemini API: {e}", extra={'user_id': 'System'})
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            raise GeminiAPIError(f"Неожиданная ошибка: {e}", details={"error": {"message": "unknown_error"}})
+
+    # Этот код выполнится, только если все попытки провалились
+    raise GeminiAPIError("Не удалось получить ответ от API после нескольких попыток.", details={"error": {"message": "service_unavailable"}})
+
 
 async def _get_dialog_chat_history(dialog_id: int) -> List[Dict[str, Any]]:
     """
