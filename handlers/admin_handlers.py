@@ -421,7 +421,6 @@ async def handle_export_users(call: types.CallbackQuery, bot: AsyncTeleBot):
 
         output = io.StringIO()
         output.write('\ufeff') # BOM для корректного открытия в Excel
-
         writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         headers = ["user_id", "username", "first_name", "last_name", "language_code", "first_interaction_date", "is_blocked"]
         writer.writerow(headers)
@@ -437,11 +436,14 @@ async def handle_export_users(call: types.CallbackQuery, bot: AsyncTeleBot):
         file_data = output.getvalue().encode('utf-8')
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
         file_name = f"users_export_{timestamp}.csv"
-        input_file = types.InputFile(io.BytesIO(file_data), filename=file_name) 
+        # ИЗМЕНЕНИЕ 1: Создаем InputFile без имени файла
+        input_file = types.InputFile(io.BytesIO(file_data)) 
 
         await bot.send_document(
             admin_id,
             input_file,
+            # ИЗМЕНЕНИЕ 2: Передаем имя файла через параметр visible_file_name
+            visible_file_name=file_name,
             caption="✅ Выгрузка данных пользователей завершена."
         )
         await bot.delete_message(admin_id, status_msg.message_id)
