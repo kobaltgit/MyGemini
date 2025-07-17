@@ -158,6 +158,7 @@ CALLBACK_DIALOG_CREATE = 'dialog_create'
 CALLBACK_ADMIN_MAIN_MENU = 'admin_main_menu'
 # Maintenance
 CALLBACK_ADMIN_TOGGLE_MAINTENANCE = 'admin_toggle_maintenance'
+CALLBACK_ADMIN_MAINTENANCE_MENU = 'admin_maintenance_menu'
 # Communication
 CALLBACK_ADMIN_COMMUNICATION_MENU = 'admin_communication_menu'
 CALLBACK_ADMIN_BROADCAST = 'admin_broadcast'

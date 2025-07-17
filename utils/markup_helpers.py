@@ -4,7 +4,7 @@ import datetime
 from typing import List, Optional, Dict, Any
 
 from config.settings import (
-    BOT_STYLES, TRANSLATE_LANGUAGES, BOT_PERSONAS, ADMIN_USER_ID,
+    BOT_STYLES, CALLBACK_ADMIN_BROADCAST, CALLBACK_ADMIN_CANCEL_BROADCAST, CALLBACK_ADMIN_CONFIRM_BROADCAST, TRANSLATE_LANGUAGES, BOT_PERSONAS, ADMIN_USER_ID,
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_IGNORE,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX,
     CALLBACK_REPORT_ERROR, CALLBACK_LANG_PREFIX,
@@ -291,15 +291,14 @@ async def create_admin_main_menu_keyboard(lang_code: str) -> types.InlineKeyboar
         loc.get_text('admin.btn_user_management', lang_code),
         callback_data=CALLBACK_ADMIN_USER_MANAGEMENT_MENU
     )
-    # Используем временный callback 'admin_maintenance'
+    # Используем правильную константу, которую добавили в settings.py
     maintenance_btn = types.InlineKeyboardButton(
         loc.get_text('admin.btn_maintenance', lang_code),
-        callback_data='admin_maintenance'
+        callback_data='admin_maintenance_menu' # Заменяем заглушку на правильный callback
     )
     markup.add(stats_btn, comm_btn)
     markup.add(user_mgmt_btn, maintenance_btn)
     return markup
-
 
 async def create_maintenance_menu_keyboard(lang_code: str) -> types.InlineKeyboardMarkup:
     """Создает клавиатуру для управления режимом обслуживания."""
@@ -326,4 +325,33 @@ async def create_maintenance_menu_keyboard(lang_code: str) -> types.InlineKeyboa
         loc.get_text('admin.btn_back_to_admin_menu', lang_code),
         callback_data=CALLBACK_ADMIN_MAIN_MENU
     ))
+    return markup
+
+async def create_communication_menu_keyboard(lang_code: str) -> types.InlineKeyboardMarkup:
+    """Создает меню для раздела 'Коммуникация'."""
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    broadcast_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_broadcast', lang_code),
+        callback_data=CALLBACK_ADMIN_BROADCAST
+    )
+    # Сюда в будущем можно будет добавить кнопку "Личное сообщение"
+    back_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_back_to_admin_menu', lang_code),
+        callback_data=CALLBACK_ADMIN_MAIN_MENU
+    )
+    markup.add(broadcast_btn, back_btn)
+    return markup
+
+def create_broadcast_confirmation_keyboard(lang_code: str) -> types.InlineKeyboardMarkup:
+    """Создает клавиатуру для подтверждения рассылки."""
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    confirm_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_confirm_broadcast', lang_code),
+        callback_data=CALLBACK_ADMIN_CONFIRM_BROADCAST
+    )
+    cancel_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_cancel_broadcast', lang_code),
+        callback_data=CALLBACK_ADMIN_CANCEL_BROADCAST
+    )
+    markup.add(confirm_btn, cancel_btn)
     return markup
