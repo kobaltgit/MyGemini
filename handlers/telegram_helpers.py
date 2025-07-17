@@ -12,6 +12,7 @@ from chatgpt_md_converter import telegram_format
 from config.settings import ADMIN_USER_ID
 from logger_config import get_logger
 from utils import text_helpers as th
+from utils import markup_helpers as mk # <-- НОВЫЙ ИМПОРТ
 
 # Получаем логгер для этого модуля
 logger = get_logger(__name__)
@@ -61,7 +62,9 @@ async def send_long_message(bot: AsyncTeleBot, chat_id: int, text: str, **kwargs
         try:
             # Используем старый метод простого разделения для plain text
             plain_text = th.remove_markdown(text)
-            parts = th.split_message(plain_text) # split_message теперь не существует, используем простой сплит
+            # Заменяем несуществующий th.split_message на простой сплит по длине
+            max_len = 4096
+            parts = [plain_text[i:i+max_len] for i in range(0, len(plain_text), max_len)]
             for part in parts:
                 await bot.send_message(chat_id, part, **kwargs)
         except Exception as fallback_e:
@@ -71,16 +74,15 @@ async def send_long_message(bot: AsyncTeleBot, chat_id: int, text: str, **kwargs
 async def send_error_reply(bot: AsyncTeleBot, message: types.Message, error_log_message: str,
                            user_reply_text: str = "Произошла внутренняя ошибка. Попробуйте позже."):
     """
-    Логирует ошибку и отправляет пользователю стандартизированный ответ.
-    Использует send_message вместо reply_to для большей надежности.
+    Логирует ошибку, отправляет пользователю стандартизированный ответ и кнопку для репорта.
     """
     user_id = message.chat.id
-    # Используем `extra` для передачи user_id в логгер
     logger.exception(error_log_message, extra={'user_id': str(user_id)})
 
     try:
-        # Заменяем reply_to на send_message для избежания ошибок, если исходное сообщение удалено
-        await bot.send_message(user_id, user_reply_text, parse_mode=None)
+        # ИЗМЕНЕНИЕ: Добавляем кнопку "Сообщить об ошибке"
+        error_report_markup = mk.create_error_report_button()
+        await bot.send_message(user_id, user_reply_text, parse_mode=None, reply_markup=error_report_markup)
     except apihelper.ApiException as e:
         logger.error(f"Не удалось отправить сообщение об ошибке пользователю {user_id}: {e}", extra={'user_id': str(user_id)})
 
@@ -89,7 +91,6 @@ async def send_error_reply(bot: AsyncTeleBot, message: types.Message, error_log_
             admin_notification = (f"⚠️ *Критическая ошибка у пользователя {user_id}* ⚠️\n\n"
                                   f"```\n{error_log_message}\n```\n\n"
                                   f"Сообщение пользователя: `{message.text or 'Не текстовое сообщение'}`")
-            # Используем send_long_message на случай, если сообщение об ошибке будет очень длинным
             await send_long_message(bot, ADMIN_USER_ID, admin_notification)
         except apihelper.ApiException as e:
             logger.error(f"Не удалось отправить уведомление об ошибке администратору: {e}", extra={'user_id': 'System'})
@@ -111,7 +112,6 @@ async def edit_message_text_safe(bot: AsyncTeleBot, chat_id: int, message_id: in
     По умолчанию пытается использовать HTML, при ошибке - без форматирования.
     """
     try:
-        # Конвертируем Markdown в HTML для безопасного редактирования
         html_text = telegram_format(text)
         kwargs['parse_mode'] = 'HTML'
         await bot.edit_message_text(html_text, chat_id, message_id, **kwargs)
@@ -121,9 +121,16 @@ async def edit_message_text_safe(bot: AsyncTeleBot, chat_id: int, message_id: in
         else:
             logger.warning(f"Ошибка парсинга при редактировании сообщения {message_id}. Попытка без форматирования. Ошибка: {e}", extra={'user_id': str(chat_id)})
             try:
-                # Убираем форматирование и пытаемся снова
                 kwargs['parse_mode'] = None
                 plain_text = th.remove_markdown(text)
                 await bot.edit_message_text(plain_text, chat_id, message_id, **kwargs)
             except apihelper.ApiException as fallback_e:
                 logger.error(f"Не удалось отредактировать сообщение {message_id} даже без форматирования: {fallback_e}", extra={'user_id': str(chat_id)})
+
+
+async def edit_message_reply_markup_safe(bot: AsyncTeleBot, chat_id: int, message_id: int, reply_markup=None):
+    """Безопасно редактирует клавиатуру сообщения, удаляя ее."""
+    try:
+        await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
+    except apihelper.ApiException as e:
+        logger.debug(f"Не удалось отредактировать клавиатуру у сообщения {message_id}: {e}", extra={'user_id': str(chat_id)})

@@ -9,7 +9,7 @@ from config.settings import (
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX, STATE_WAITING_FOR_HISTORY_DATE,
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_SETTINGS_LANG_PREFIX, CALLBACK_SETTINGS_SET_API_KEY,
     CALLBACK_SETTINGS_CHOOSE_MODEL_MENU, CALLBACK_SETTINGS_MODEL_PREFIX,
-    CALLBACK_IGNORE, STATE_WAITING_FOR_API_KEY,
+    CALLBACK_IGNORE, STATE_WAITING_FOR_API_KEY, STATE_WAITING_FOR_FEEDBACK, CALLBACK_REPORT_ERROR,
     CALLBACK_SETTINGS_PERSONA_MENU, CALLBACK_SETTINGS_PERSONA_PREFIX, BOT_PERSONAS,
     # Импорты для диалогов
     CALLBACK_DIALOGS_MENU, CALLBACK_DIALOG_SWITCH_PREFIX, CALLBACK_DIALOG_RENAME_PREFIX,
@@ -47,6 +47,9 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
     try:
         if data == CALLBACK_IGNORE:
             await tg_helpers.answer_callback_query(bot, call)
+        # --- Обратная связь ---
+        elif data == CALLBACK_REPORT_ERROR:
+            await handle_report_error(bot, call, lang_code)
         # --- Настройки ---
         elif data.startswith(CALLBACK_SETTINGS_STYLE_PREFIX):
             await handle_style_setting(bot, call, lang_code)
@@ -85,7 +88,9 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
         elif data.startswith(CALLBACK_CALENDAR_MONTH_PREFIX):
             await handle_calendar_month_navigation(bot, call)
         else:
-            await tg_helpers.answer_callback_query(bot, call, text="Unknown action", show_alert=True)
+            # Пропускаем колбэки для админки, они обрабатываются в admin_handlers
+            if not data.startswith('admin_'):
+                await tg_helpers.answer_callback_query(bot, call, text="Unknown action", show_alert=True)
     except GeminiAPIError as e:
         user_friendly_error = loc.get_text(e.error_key, lang_code)
         await tg_helpers.answer_callback_query(bot, call, text=user_friendly_error, show_alert=True)
@@ -94,7 +99,23 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
         await tg_helpers.answer_callback_query(bot, call, text="An internal error occurred.", show_alert=True)
 
 
-# --- НОВЫЕ ОБРАБОТЧИКИ ДИАЛОГОВ ---
+# --- НОВЫЙ ОБРАБОТЧИК ОБРАТНОЙ СВЯЗИ ---
+
+async def handle_report_error(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
+    """
+    Обрабатывает нажатие на кнопку "Сообщить об ошибке".
+    """
+    user_id = call.from_user.id
+    # Убираем клавиатуру, чтобы избежать повторных нажатий
+    await tg_helpers.edit_message_reply_markup_safe(bot, call.message.chat.id, call.message.message_id)
+    # Переводим пользователя в состояние ожидания фидбэка
+    await bot.set_state(user_id, STATE_WAITING_FOR_FEEDBACK, call.message.chat.id)
+    # Отправляем инструкцию
+    await bot.send_message(user_id, loc.get_text('feedback_prompt', lang_code))
+    await tg_helpers.answer_callback_query(bot, call)
+
+
+# --- Обработчики диалогов ---
 
 async def handle_dialogs_menu(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Отображает меню управления диалогами."""
@@ -159,7 +180,6 @@ async def handle_delete_dialog_start(bot: AsyncTeleBot, call: types.CallbackQuer
         return
 
     if len(dialogs) <= 1:
-        # Эта проверка на случай, если что-то пошло не так, т.к. активный диалог уже не должен был дать сюда попасть.
         await tg_helpers.answer_callback_query(bot, call, text="Нельзя удалить последний диалог.", show_alert=True)
         return
 
@@ -177,23 +197,19 @@ async def handle_delete_dialog_confirm(bot: AsyncTeleBot, call: types.CallbackQu
     user_id = call.from_user.id
     dialog_id_to_delete = int(call.data[len(CALLBACK_DIALOG_CONFIRM_DELETE_PREFIX):])
 
-    # Удаляем сам диалог
     deleted_dialog_name = await db_manager.delete_dialog(user_id, dialog_id_to_delete)
     if not deleted_dialog_name:
         await tg_helpers.answer_callback_query(bot, call, text="Ошибка при удалении диалога.", show_alert=True)
         return
 
-    # После удаления проверяем, что осталось.
     remaining_dialogs = await db_manager.get_user_dialogs(user_id)
     if not remaining_dialogs:
-        # Такого быть не должно из-за проверок выше, но это страховка
         new_dialog_name = "Основной диалог" if lang_code == 'ru' else "General Chat"
         await db_manager.create_dialog(user_id, new_dialog_name, set_active=True)
         await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('dialog_deleted_last_success', lang_code).format(name=deleted_dialog_name))
     else:
          await tg_helpers.answer_callback_query(bot, call, text=loc.get_text('dialog_deleted_success', lang_code).format(name=deleted_dialog_name))
 
-    # В любом случае обновляем меню, чтобы показать актуальный список
     await handle_dialogs_menu(bot, call, lang_code)
 
 # --- Обработчики настроек ---
@@ -328,7 +344,6 @@ async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.Callback
         )
         try:
             selected_date = datetime.datetime.strptime(selected_date_str, '%Y-%m-%d').date()
-            # ИЗМЕНЕНО: получаем историю для активного диалога
             active_dialog_id = await db_manager.get_active_dialog_id(user_id)
             if active_dialog_id:
                 history = await db_manager.get_conversation_history_by_date(active_dialog_id, selected_date)
