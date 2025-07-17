@@ -4,7 +4,7 @@ import datetime
 from typing import List, Optional, Dict, Any
 
 from config.settings import (
-    BOT_STYLES, TRANSLATE_LANGUAGES, BOT_PERSONAS, ADMIN_USER_ID,
+    BOT_STYLES, CALLBACK_ADMIN_EXPORT_USERS, TRANSLATE_LANGUAGES, BOT_PERSONAS, ADMIN_USER_ID,
     CALLBACK_SETTINGS_STYLE_PREFIX, CALLBACK_IGNORE,
     CALLBACK_CALENDAR_DATE_PREFIX, CALLBACK_CALENDAR_MONTH_PREFIX,
     CALLBACK_REPORT_ERROR, CALLBACK_LANG_PREFIX,
@@ -261,8 +261,14 @@ async def create_admin_main_menu_keyboard(lang_code: str) -> types.InlineKeyboar
         loc.get_text('admin.btn_maintenance', lang_code),
         callback_data=CALLBACK_ADMIN_MAINTENANCE_MENU
     )
+    # Новая кнопка экспорта
+    export_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_export_users', lang_code),
+        callback_data=CALLBACK_ADMIN_EXPORT_USERS # Используем новую константу
+    )
     markup.add(stats_btn, comm_btn)
     markup.add(user_mgmt_btn, maintenance_btn)
+    markup.add(export_btn)
     return markup
 
 

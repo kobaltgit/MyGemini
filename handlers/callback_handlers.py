@@ -32,7 +32,8 @@ logger = get_logger(__name__)
 
 async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
     """Обрабатывает все callback запросы."""
-    user_id = call.from_user.id
+    user = call.from_user
+    user_id = user.id
     data = call.data
     message = call.message
 
@@ -40,7 +41,8 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
         await tg_helpers.answer_callback_query(bot, call)
         return
 
-    await db_manager.add_or_update_user(user_id)
+    # Обновляем данные пользователя при каждом колбэке
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
     # Маршрутизатор колбэков

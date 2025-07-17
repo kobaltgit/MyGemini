@@ -116,6 +116,9 @@ def setup_database_sync():
             cursor.execute("""
             CREATE TABLE users (
                 user_id INTEGER PRIMARY KEY,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
                 bot_style TEXT DEFAULT 'default' NOT NULL,
                 first_interaction_date TEXT,
                 api_key TEXT DEFAULT NULL,
@@ -126,7 +129,11 @@ def setup_database_sync():
                 is_blocked INTEGER NOT NULL DEFAULT 0
             )""")
         else:
-            required_user_columns = {'active_dialog_id', 'active_persona', 'is_blocked'}
+            # Обновлено: добавляем новые поля для миграции
+            required_user_columns = {
+                'active_dialog_id', 'active_persona', 'is_blocked',
+                'username', 'first_name', 'last_name'
+            }
             missing_user_columns = required_user_columns - user_columns
             for col in missing_user_columns:
                 db_logger.info(f"Добавляем отсутствующий столбец '{col}' в 'users'...")
@@ -134,6 +141,8 @@ def setup_database_sync():
                     cursor.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT 'default' NOT NULL")
                 elif col == 'is_blocked':
                     cursor.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+                elif col in ['username', 'first_name', 'last_name']:
+                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT") # Могут быть NULL
                 else: # active_dialog_id
                     cursor.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL")
 
@@ -230,18 +239,36 @@ async def setup_database():
     await asyncio.to_thread(setup_database_sync)
 
 
-async def add_or_update_user(user_id: int):
-    """Добавляет нового пользователя или обновляет его данные, включая создание диалога по умолчанию."""
+async def add_or_update_user(user_id: int, username: Optional[str], first_name: Optional[str], last_name: Optional[str]):
+    """
+    Добавляет нового пользователя или обновляет его данные (имена).
+    Также создает диалог по умолчанию, если это необходимо.
+    """
     user_data = await _execute_query("SELECT user_id, active_dialog_id FROM users WHERE user_id = ?", (user_id,), fetch_one=True)
+
     if not user_data:
-        db_logger.info(f"Добавляем нового пользователя {user_id}.")
+        db_logger.info(f"Добавляем нового пользователя {user_id} (@{username}).")
         today_date_str = datetime.date.today().strftime('%Y-%m-%d')
-        query_insert_user = "INSERT INTO users (user_id, first_interaction_date) VALUES (?, ?)"
-        await _execute_query(query_insert_user, (user_id, today_date_str), is_write_operation=True)
+        query_insert_user = """
+            INSERT INTO users (user_id, username, first_name, last_name, first_interaction_date) 
+            VALUES (?, ?, ?, ?, ?)
+        """
+        params = (user_id, username, first_name, last_name, today_date_str)
+        await _execute_query(query_insert_user, params, is_write_operation=True)
+        # Создаем диалог по умолчанию для нового пользователя
         await create_dialog(user_id, "Основной диалог", set_active=True)
-    elif not user_data['active_dialog_id']:
-        db_logger.warning(f"У существующего пользователя {user_id} нет активного диалога. Создаем новый.")
-        await create_dialog(user_id, "Основной диалог", set_active=True)
+    else:
+        # Пользователь уже существует, обновляем его имена, так как они могли измениться
+        query_update_user = """
+            UPDATE users SET username = ?, first_name = ?, last_name = ? WHERE user_id = ?
+        """
+        params = (username, first_name, last_name, user_id)
+        await _execute_query(query_update_user, params, is_write_operation=True)
+        
+        # Проверяем, есть ли у пользователя активный диалог (для старых пользователей)
+        if not user_data['active_dialog_id']:
+            db_logger.warning(f"У существующего пользователя {user_id} нет активного диалога. Создаем новый.")
+            await create_dialog(user_id, "Основной диалог", set_active=True)
 
 
 async def create_dialog(user_id: int, name: str, set_active: bool = False) -> Optional[int]:
@@ -368,7 +395,8 @@ async def get_total_user_message_count(user_id: int) -> int:
 
 
 async def set_user_bot_style(user_id: int, style: str):
-    await add_or_update_user(user_id)
+    user_info = await _execute_query("SELECT username, first_name, last_name FROM users WHERE user_id = ?", (user_id,), fetch_one=True)
+    await add_or_update_user(user_id, user_info['username'], user_info['first_name'], user_info['last_name'])
     query = "UPDATE users SET bot_style = ? WHERE user_id = ?"
     await _execute_query(query, (style, user_id), is_write_operation=True)
 
@@ -381,7 +409,8 @@ async def get_user_bot_style(user_id: int) -> str:
 
 async def set_user_api_key(user_id: int, api_key: Optional[str]):
     """Устанавливает или сбрасывает API-ключ пользователя."""
-    await add_or_update_user(user_id)
+    user_info = await _execute_query("SELECT username, first_name, last_name FROM users WHERE user_id = ?", (user_id,), fetch_one=True)
+    await add_or_update_user(user_id, user_info['username'], user_info['first_name'], user_info['last_name'])
     encrypted_key = crypto_helpers.encrypt_data(api_key) if api_key else None
     query = "UPDATE users SET api_key = ? WHERE user_id = ?"
     await _execute_query(query, (encrypted_key, user_id), is_write_operation=True)
@@ -402,7 +431,8 @@ async def get_user_api_key(user_id: int) -> Optional[str]:
 
 
 async def set_user_language(user_id: int, lang_code: str):
-    await add_or_update_user(user_id)
+    user_info = await _execute_query("SELECT username, first_name, last_name FROM users WHERE user_id = ?", (user_id,), fetch_one=True)
+    await add_or_update_user(user_id, user_info['username'], user_info['first_name'], user_info['last_name'])
     query = "UPDATE users SET language_code = ? WHERE user_id = ?"
     await _execute_query(query, (lang_code, user_id), is_write_operation=True)
 
@@ -414,7 +444,8 @@ async def get_user_language(user_id: int) -> str:
 
 
 async def set_user_gemini_model(user_id: int, model_name: str):
-    await add_or_update_user(user_id)
+    user_info = await _execute_query("SELECT username, first_name, last_name FROM users WHERE user_id = ?", (user_id,), fetch_one=True)
+    await add_or_update_user(user_id, user_info['username'], user_info['first_name'], user_info['last_name'])
     query = "UPDATE users SET gemini_model = ? WHERE user_id = ?"
     await _execute_query(query, (model_name, user_id), is_write_operation=True)
 
@@ -426,7 +457,8 @@ async def get_user_gemini_model(user_id: int) -> Optional[str]:
 
 
 async def set_user_persona(user_id: int, persona_id: str):
-    await add_or_update_user(user_id)
+    user_info = await _execute_query("SELECT username, first_name, last_name FROM users WHERE user_id = ?", (user_id,), fetch_one=True)
+    await add_or_update_user(user_id, user_info['username'], user_info['first_name'], user_info['last_name'])
     query = "UPDATE users SET active_persona = ? WHERE user_id = ?"
     await _execute_query(query, (persona_id, user_id), is_write_operation=True)
 
@@ -528,6 +560,9 @@ async def get_user_info_for_admin(user_id: int) -> Optional[Dict[str, Any]]:
     query = """
         SELECT
             u.user_id,
+            u.username,
+            u.first_name,
+            u.last_name,
             u.language_code,
             u.first_interaction_date,
             u.is_blocked,
@@ -536,4 +571,30 @@ async def get_user_info_for_admin(user_id: int) -> Optional[Dict[str, Any]]:
         WHERE u.user_id = ?
     """
     row = await _execute_query(query, (user_id,), fetch_one=True)
-    return dict(row) if row else None
+    # Также обновляем информацию о пользователе при просмотре
+    if row:
+        user_info = dict(row)
+        # Добавляем обновление имени пользователя при его просмотре админом
+        # Это необязательно, но может быть полезно
+        # await add_or_update_user(user_id, user_info.get('username'), user_info.get('first_name'), user_info.get('last_name'))
+        return user_info
+    return None
+
+
+# --- НОВАЯ ФУНКЦИЯ ДЛЯ ЭКСПОРТА ---
+async def get_all_users_for_export() -> List[Dict[str, Any]]:
+    """Извлекает всех пользователей со всеми необходимыми полями для экспорта в CSV."""
+    query = """
+        SELECT
+            user_id,
+            username,
+            first_name,
+            last_name,
+            language_code,
+            first_interaction_date,
+            is_blocked
+        FROM users
+        ORDER BY user_id ASC
+    """
+    rows = await _execute_query(query, fetch_all=True)
+    return [dict(row) for row in rows] if rows else []

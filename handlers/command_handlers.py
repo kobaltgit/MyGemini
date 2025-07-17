@@ -25,78 +25,90 @@ logger = get_logger(__name__)
 
 async def handle_start(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /start."""
-    user_id = message.chat.id
-    first_name = message.from_user.first_name or "User"
+    user = message.from_user
+    user_id = user.id
     logger.info(f"Команда /start от user_id: {user_id}", extra={'user_id': str(user_id)})
 
-    await db_manager.add_or_update_user(user_id)
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
-    await bot.delete_state(message.from_user.id, message.chat.id)
+    await bot.delete_state(user_id, message.chat.id)
     
     active_dialog_id = await db_manager.get_active_dialog_id(user_id)
     if active_dialog_id:
         gemini_service.reset_dialog_chat(active_dialog_id)
 
-    welcome_text = loc.get_text('welcome', lang_code).format(name=first_name)
+    welcome_text = loc.get_text('welcome', lang_code).format(name=user.first_name or "User")
     await tg_helpers.send_long_message(
         bot, user_id, welcome_text,
-        reply_markup=mk.create_main_keyboard(lang_code, user_id) # ИЗМЕНЕНИЕ
+        reply_markup=mk.create_main_keyboard(lang_code, user_id)
     )
 
 
 async def handle_help(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /help."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
+    
     help_text = loc.get_text('cmd_help_text', lang_code)
     await tg_helpers.send_long_message(
         bot, user_id, help_text,
-        reply_markup=mk.create_main_keyboard(lang_code, user_id) # ИЗМЕНЕНИЕ
+        reply_markup=mk.create_main_keyboard(lang_code, user_id)
     )
 
 
 async def handle_reset(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /reset."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
-    await bot.delete_state(message.from_user.id, message.chat.id)
+    await bot.delete_state(user_id, message.chat.id)
     
     active_dialog_id = await db_manager.get_active_dialog_id(user_id)
     if active_dialog_id:
         gemini_service.reset_dialog_chat(active_dialog_id)
 
     reset_text = loc.get_text('cmd_reset_success', lang_code)
-    main_keyboard = mk.create_main_keyboard(lang_code, user_id) # ИЗМЕНЕНИЕ
+    main_keyboard = mk.create_main_keyboard(lang_code, user_id)
     await bot.reply_to(message, reset_text, reply_markup=main_keyboard)
 
 
 async def handle_set_api_key(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /set_api_key."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
     text = loc.get_text('set_api_key_prompt', lang_code)
-    await bot.set_state(message.from_user.id, STATE_WAITING_FOR_API_KEY, message.chat.id)
+    await bot.set_state(user_id, STATE_WAITING_FOR_API_KEY, message.chat.id)
     await bot.reply_to(message, text, reply_markup=types.ReplyKeyboardRemove())
 
 
 async def handle_history(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /history."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
     calendar_markup = mk.create_calendar_keyboard()
     text = loc.get_text('history_prompt', lang_code)
     await bot.send_message(user_id, text, reply_markup=calendar_markup)
-    await bot.set_state(message.from_user.id, STATE_WAITING_FOR_HISTORY_DATE, message.chat.id)
+    await bot.set_state(user_id, STATE_WAITING_FOR_HISTORY_DATE, message.chat.id)
 
 
 async def handle_settings(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /settings."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
+    
     settings_markup = await mk.create_settings_keyboard(user_id)
     await bot.send_message(
         user_id, loc.get_text('settings_title', lang_code),
@@ -106,7 +118,9 @@ async def handle_settings(message: types.Message, bot: AsyncTeleBot):
 
 async def handle_dialogs(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /dialogs."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
     text = f"{loc.get_text('dialogs_menu_title', lang_code)}\n\n" \
@@ -121,7 +135,9 @@ async def handle_dialogs(message: types.Message, bot: AsyncTeleBot):
 
 async def handle_translate(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /translate."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
     lang_markup = mk.create_language_selection_keyboard()
@@ -131,11 +147,15 @@ async def handle_translate(message: types.Message, bot: AsyncTeleBot):
 
 async def handle_personal_account_button(message: types.Message, bot: AsyncTeleBot):
     """Обработчик нажатия на кнопку 'Личный кабинет'."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
+    lang_code = await db_manager.get_user_language(user_id)
+    
     await tg_helpers.send_typing_action(bot, user_id)
     info_text = await personal_account.get_personal_account_info(user_id)
-    lang_code = await db_manager.get_user_language(user_id)
-    main_keyboard = mk.create_main_keyboard(lang_code, user_id) # ИЗМЕНЕНИЕ
+    
+    main_keyboard = mk.create_main_keyboard(lang_code, user_id)
     await tg_helpers.send_long_message(
         bot, user_id, info_text,
         reply_markup=main_keyboard
@@ -144,7 +164,9 @@ async def handle_personal_account_button(message: types.Message, bot: AsyncTeleB
 
 async def handle_usage(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /usage для отображения статистики расходов."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
     api_key_exists = await db_manager.get_user_api_key(user_id)
@@ -195,7 +217,9 @@ async def handle_usage(message: types.Message, bot: AsyncTeleBot):
 
 async def handle_full_guide(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /help_guide, отправляет полную справку."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
     
     await tg_helpers.send_typing_action(bot, user_id)
@@ -206,7 +230,9 @@ async def handle_full_guide(message: types.Message, bot: AsyncTeleBot):
 
 async def handle_api_key_info(message: types.Message, bot: AsyncTeleBot):
     """Обработчик команды /apikey_info, отправляет секцию про API ключ."""
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
     await tg_helpers.send_typing_action(bot, user_id)

@@ -171,6 +171,8 @@ CALLBACK_ADMIN_TOGGLE_BLOCK_PREFIX = 'admin_toggle_block:'
 CALLBACK_ADMIN_RESET_API_KEY_PREFIX = 'admin_reset_api_key:'
 # Statistics
 CALLBACK_ADMIN_STATS_MENU = 'admin_stats_menu'
+# Export
+CALLBACK_ADMIN_EXPORT_USERS = 'admin_export_users'
 
 
 # --- User States ---

@@ -129,6 +129,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
             'btn_communication': "📬 Коммуникация",
             'btn_user_management': "👤 Управление пользователями",
             'btn_maintenance': "🛠️ Режим обслуживания",
+            'btn_export_users': "📥 Выгрузить пользователей",
             'btn_back_to_admin_menu': "⬅️ Назад в админ-панель",
             # Режим обслуживания
             'maintenance_menu_title': "🛠️ *Режим обслуживания*",
@@ -304,6 +305,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
             'btn_communication': "📬 Communication",
             'btn_user_management': "👤 User Management",
             'btn_maintenance': "🛠️ Maintenance Mode",
+            'btn_export_users': "📥 Export Users",
             'btn_back_to_admin_menu': "⬅️ Back to Admin Panel",
             # Maintenance Mode
             'maintenance_menu_title': "🛠️ *Maintenance Mode*",

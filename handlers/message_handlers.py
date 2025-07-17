@@ -14,7 +14,7 @@ from config.settings import (
     STATE_WAITING_FOR_API_KEY,
     STATE_WAITING_FOR_NEW_DIALOG_NAME, 
     STATE_WAITING_FOR_RENAME_DIALOG,
-    STATE_WAITING_FOR_FEEDBACK, # <-- Новый импорт
+    STATE_WAITING_FOR_FEEDBACK,
     GEMINI_MODEL_NAME,
     BOT_PERSONAS,
     ADMIN_USER_ID
@@ -74,11 +74,15 @@ async def handle_any_message(message: types.Message, bot: AsyncTeleBot):
     """
     Обрабатывает любое входящее сообщение (текст или фото).
     """
-    user_id = message.chat.id
+    user = message.from_user
+    user_id = user.id
     content_type = message.content_type
 
     user_logger.info(f"Получено сообщение ({content_type}) от user ID: {user_id}", extra={'user_id': str(user_id)})
-    await db_manager.add_or_update_user(user_id)
+    
+    # Обновляем данные пользователя при каждом сообщении
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
+    
     lang_code = await db_manager.get_user_language(user_id)
 
     # Централизованная проверка доступа
@@ -117,7 +121,7 @@ async def handle_stateful_message(bot: AsyncTeleBot, message: types.Message, cur
         STATE_WAITING_FOR_TRANSLATE_TEXT: handle_state_translate,
         STATE_WAITING_FOR_NEW_DIALOG_NAME: handle_state_new_dialog_name,
         STATE_WAITING_FOR_RENAME_DIALOG: handle_state_rename_dialog,
-        STATE_WAITING_FOR_FEEDBACK: handle_state_feedback, # <-- Новый обработчик
+        STATE_WAITING_FOR_FEEDBACK: handle_state_feedback,
     }
     handler = state_handlers.get(current_state)
     if handler:
@@ -145,7 +149,6 @@ async def handle_state_api_key(bot: AsyncTeleBot, message: types.Message):
         await db_manager.set_user_api_key(user_id, api_key)
         await bot.delete_state(message.from_user.id, message.chat.id)
         text = loc.get_text('api_key_success', lang_code)
-        # ИЗМЕНЕНИЕ: передаем user_id для создания клавиатуры
         await bot.send_message(user_id, text, reply_markup=mk.create_main_keyboard(lang_code, user_id))
     else:
         text = loc.get_text('api_key_invalid', lang_code)
@@ -219,7 +222,6 @@ async def handle_state_rename_dialog(bot: AsyncTeleBot, message: types.Message):
     if dialog_id_to_rename:
         await db_manager.rename_dialog(dialog_id_to_rename, new_name)
         await bot.delete_state(user_id, message.chat.id)
-        # Ошибка в ключе локализации: должно быть dialog_renamed_success
         await bot.send_message(user_id, loc.get_text('dialog_renamed_success', lang_code).format(new_name=new_name))
         
         dialog_keyboard = await mk.create_dialogs_menu_keyboard(user_id)

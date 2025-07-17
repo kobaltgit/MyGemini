@@ -4,6 +4,9 @@
 переменной ADMIN_USER_ID из файла настроек.
 """
 import asyncio
+import csv  # <-- НОВЫЙ ИМПОРТ
+import io   # <-- НОВЫЙ ИМПОРТ
+from datetime import datetime # <-- НОВЫЙ ИМПОРТ
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 from telebot.apihelper import ApiException
@@ -17,7 +20,8 @@ from config.settings import (
     # Новые импорты
     CALLBACK_ADMIN_STATS_MENU, CALLBACK_ADMIN_USER_MANAGEMENT_MENU,
     STATE_ADMIN_WAITING_FOR_USER_ID_TO_MANAGE,
-    CALLBACK_ADMIN_TOGGLE_BLOCK_PREFIX, CALLBACK_ADMIN_RESET_API_KEY_PREFIX
+    CALLBACK_ADMIN_TOGGLE_BLOCK_PREFIX, CALLBACK_ADMIN_RESET_API_KEY_PREFIX,
+    CALLBACK_ADMIN_EXPORT_USERS
 )
 from utils import markup_helpers as mk
 from utils import localization as loc
@@ -413,6 +417,63 @@ async def handle_reset_api_key(call: types.CallbackQuery, bot: AsyncTeleBot):
     alert_text = loc.get_text('admin.user_api_key_reset_success', lang_code).format(user_id=user_id_to_reset)
     await bot.answer_callback_query(call.id, alert_text, show_alert=True)
 
+# --- НОВЫЙ БЛОК ЭКСПОРТА ---
+@admin_required
+async def handle_export_users(call: types.CallbackQuery, bot: AsyncTeleBot):
+    """
+    Обрабатывает запрос на выгрузку пользователей в CSV.
+    """
+    admin_id = call.from_user.id
+    await bot.answer_callback_query(call.id)
+    status_msg = await bot.send_message(admin_id, "⏳ Готовлю файл для выгрузки...")
+
+    try:
+        users_data = await db_manager.get_all_users_for_export()
+        if not users_data:
+            await bot.edit_message_text("Нет пользователей для экспорта.", admin_id, status_msg.message_id)
+            return
+
+        # Используем StringIO для создания файла в памяти
+        output = io.StringIO()
+        # Используем utf-8-sig, чтобы Excel корректно распознавал кириллицу
+        output.write('\ufeff') 
+        
+        writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+
+        # Заголовки
+        headers = [
+            "user_id", "username", "first_name", "last_name", 
+            "language_code", "first_interaction_date", "is_blocked"
+        ]
+        writer.writerow(headers)
+
+        # Данные
+        for user in users_data:
+            writer.writerow([
+                user.get("user_id"),
+                user.get("username", ""),
+                user.get("first_name", ""),
+                user.get("last_name", ""),
+                user.get("language_code", ""),
+                user.get("first_interaction_date", ""),
+                "Yes" if user.get("is_blocked") else "No"
+            ])
+
+        # Подготовка файла для отправки
+        output.seek(0)
+        file_data = output.getvalue().encode('utf-8')
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        file_name = f"users_export_{timestamp}.csv"
+        
+        input_file = types.InputFile(io.BytesIO(file_data), filename=file_name)
+        
+        await bot.send_document(admin_id, input_file, caption="✅ Выгрузка данных пользователей завершена.")
+        await bot.delete_message(admin_id, status_msg.message_id)
+
+    except Exception as e:
+        logger.exception(f"Ошибка при экспорте пользователей: {e}", extra={'user_id': str(admin_id)})
+        await bot.edit_message_text("❌ Произошла ошибка при создании файла.", admin_id, status_msg.message_id)
 
 # --- Регистрация всех обработчиков ---
 
@@ -451,6 +512,7 @@ def register_admin_handlers(bot: AsyncTeleBot):
     bot.register_callback_query_handler(handle_communication_menu, func=lambda call: call.data == CALLBACK_ADMIN_COMMUNICATION_MENU, pass_bot=True)
     bot.register_callback_query_handler(handle_maintenance_menu, func=lambda call: call.data == CALLBACK_ADMIN_MAINTENANCE_MENU, pass_bot=True)
     bot.register_callback_query_handler(handle_stats_menu, func=lambda call: call.data == CALLBACK_ADMIN_STATS_MENU, pass_bot=True)
+    bot.register_callback_query_handler(handle_export_users, func=lambda call: call.data == CALLBACK_ADMIN_EXPORT_USERS, pass_bot=True)
     bot.register_callback_query_handler(handle_user_management_menu, func=lambda call: call.data == CALLBACK_ADMIN_USER_MANAGEMENT_MENU, pass_bot=True)
     bot.register_callback_query_handler(handle_toggle_maintenance, func=lambda call: call.data.startswith(CALLBACK_ADMIN_TOGGLE_MAINTENANCE), pass_bot=True)
     bot.register_callback_query_handler(handle_broadcast_start, func=lambda call: call.data == CALLBACK_ADMIN_BROADCAST, pass_bot=True)
