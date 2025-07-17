@@ -146,7 +146,7 @@ CALLBACK_LANG_PREFIX = 'lang:'
 # Calendar (for history)
 CALLBACK_CALENDAR_DATE_PREFIX = 'calendar_date:'
 CALLBACK_CALENDAR_MONTH_PREFIX = 'calendar_month:'
-# НОВЫЕ ПРЕФИКСЫ ДЛЯ ДИАЛОГОВ
+# Dialogs
 CALLBACK_DIALOGS_MENU = 'dialogs_menu'
 CALLBACK_DIALOG_SWITCH_PREFIX = 'dialog_switch:'
 CALLBACK_DIALOG_RENAME_PREFIX = 'dialog_rename:'
@@ -154,14 +154,38 @@ CALLBACK_DIALOG_DELETE_PREFIX = 'dialog_delete:'
 CALLBACK_DIALOG_CONFIRM_DELETE_PREFIX = 'dialog_confirm_delete:'
 CALLBACK_DIALOG_CREATE = 'dialog_create'
 
+# --- НОВЫЕ ПРЕФИКСЫ ДЛЯ АДМИН-ПАНЕЛИ ---
+CALLBACK_ADMIN_MAIN_MENU = 'admin_main_menu'
+# Maintenance
+CALLBACK_ADMIN_TOGGLE_MAINTENANCE = 'admin_toggle_maintenance'
+# Communication
+CALLBACK_ADMIN_COMMUNICATION_MENU = 'admin_communication_menu'
+CALLBACK_ADMIN_BROADCAST = 'admin_broadcast'
+CALLBACK_ADMIN_CONFIRM_BROADCAST = 'admin_confirm_broadcast'
+CALLBACK_ADMIN_CANCEL_BROADCAST = 'admin_cancel_broadcast'
+# User Management
+CALLBACK_ADMIN_USER_MANAGEMENT_MENU = 'admin_user_management_menu'
+CALLBACK_ADMIN_USER_INFO_PREFIX = 'admin_user_info:'
+CALLBACK_ADMIN_TOGGLE_BLOCK_PREFIX = 'admin_toggle_block:'
+CALLBACK_ADMIN_RESET_API_KEY_PREFIX = 'admin_reset_api_key:'
+# Statistics
+CALLBACK_ADMIN_STATS_MENU = 'admin_stats_menu'
+
 
 # --- User States ---
 STATE_WAITING_FOR_TRANSLATE_TEXT = 'waiting_for_translate_text'
 STATE_WAITING_FOR_HISTORY_DATE = 'waiting_for_history_date'
 STATE_WAITING_FOR_API_KEY = 'waiting_for_api_key'
-# НОВЫЕ СОСТОЯНИЯ ДЛЯ ДИАЛОГОВ
+STATE_WAITING_FOR_FEEDBACK = 'waiting_for_feedback' # Для репортов об ошибках
+# Dialogs
 STATE_WAITING_FOR_NEW_DIALOG_NAME = 'waiting_for_new_dialog_name'
 STATE_WAITING_FOR_RENAME_DIALOG = 'waiting_for_rename_dialog'
+
+# --- НОВЫЕ СОСТОЯНИЯ ДЛЯ АДМИН-ПАНЕЛИ ---
+STATE_ADMIN_WAITING_FOR_BROADCAST_MSG = 'admin_waiting_for_broadcast_msg'
+STATE_ADMIN_WAITING_FOR_USER_ID_TO_MANAGE = 'admin_waiting_for_user_id_manage'
+STATE_ADMIN_WAITING_FOR_USER_ID_TO_MESSAGE = 'admin_waiting_for_user_id_message'
+STATE_ADMIN_WAITING_FOR_MESSAGE_TO_USER = 'admin_waiting_for_message_to_user'
 
 
 print(f"Конфигурация MyGemini/settings.py загружена. Модель Gemini: {GEMINI_MODEL_NAME}")

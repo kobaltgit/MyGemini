@@ -41,7 +41,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         # --- Выбор персоны ---
         'persona_selection_title': "🎭 *Выбор персоны ассистента*",
         'persona_selection_desc': "Выберите роль, которую бот будет отыгрывать. Это изменит его стиль общения и экспертизу. Текущие *стили* (краткий, подробный и т.д.) будут игнорироваться.",
-        # --- НОВОЕ: Управление диалогами ---
+        # --- Управление диалогами ---
         'dialogs_menu_title': "🗂️ *Управление диалогами*",
         'dialogs_menu_desc': "Здесь вы можете создавать новые диалоги, переключаться между ними, переименовывать и удалять. Активный диалог отмечен ✅.",
         'btn_create_dialog': "➕ Создать новый",
@@ -92,6 +92,10 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'usage_estimated_cost': "💰 Примерная стоимость",
         'usage_no_data': "Нет данных для отображения.",
         'usage_cost_notice': "\n_Стоимость является приблизительной и рассчитывается на основе текущей модели и публичных тарифов Google._",
+        # --- Обратная связь ---
+        'feedback_prompt': "Пожалуйста, опишите проблему или ваше предложение. Это сообщение будет отправлено администратору.",
+        'feedback_sent': "✅ Спасибо! Ваше сообщение отправлено администратору.",
+        'feedback_admin_notification': "⚠️ *Новое сообщение от пользователя!*\n\n*От:* {user_id} (@{username})\n*Имя:* {first_name}\n\n*Сообщение:*\n`{text}`\n\n*Для ответа используйте команду:* `/reply {user_id} `",
         # --- Ошибки ---
         'unsupported_content': "Я пока не умею обрабатывать такой тип контента.",
         'state_wrong_content_type': "Пожалуйста, отправьте текст для завершения текущего действия или нажмите /reset.",
@@ -104,8 +108,10 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'gemini_error_unavailable': "🛠️ *Сервис временно недоступен.*\nСерверы Google могут быть перегружены. Пожалуйста, повторите попытку через несколько минут.",
         'gemini_error_invalid_argument': "🤔 *Ошибка: Некорректный запрос.*\nВозможно, вы пытаетесь отправить контент, который не поддерживается выбранной моделью (например, видео).",
         'gemini_error_unknown': "🤯 *Произошла неизвестная ошибка при обращении к API.*\nПожалуйста, попробуйте еще раз. Если ошибка повторяется, свяжитесь с администратором.",
+        'user_is_blocked': "❌ Вы были заблокированы администратором.",
+        'maintenance_mode_on': "🛠️ Бот временно находится на техническом обслуживании. Пожалуйста, попробуйте позже.",
         # --- Кнопки ---
-        'btn_dialogs': "🗂️ Диалоги", # НОВАЯ КНОПКА
+        'btn_dialogs': "🗂️ Диалоги",
         'btn_translate': "🇷🇺 Перевести",
         'btn_history': "📜 История",
         'btn_account': "👤 Личный кабинет",
@@ -113,6 +119,64 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'btn_help': "❓ Помощь",
         'btn_reset': "🔄 Сброс",
         'btn_usage': "📊 Расходы",
+        'btn_admin_panel': "👑 Админ-панель",
+        # --- Секция админа ---
+        'admin': {
+            'panel_title': "👑 *Админ-панель*",
+            'not_admin': "❌ У вас нет прав для выполнения этой команды.",
+            # Меню
+            'btn_stats': "📊 Статистика",
+            'btn_communication': "📬 Коммуникация",
+            'btn_user_management': "👤 Управление пользователями",
+            'btn_maintenance': "🛠️ Режим обслуживания",
+            'btn_back_to_admin_menu': "⬅️ Назад в админ-панель",
+            # Режим обслуживания
+            'maintenance_menu_title': "🛠️ *Режим обслуживания*",
+            'maintenance_status_on': "🟢 *Статус:* ВКЛЮЧЕН",
+            'maintenance_status_off': "🔴 *Статус:* ВЫКЛЮЧЕН",
+            'btn_maintenance_enable': "Включить",
+            'btn_maintenance_disable': "Выключить",
+            'maintenance_enabled_msg': "✅ Режим обслуживания ВКЛЮЧЕН. Только администратор может использовать бота.",
+            'maintenance_disabled_msg': "✅ Режим обслуживания ВЫКЛЮЧЕН. Бот доступен всем пользователям.",
+            # Статистика
+            'stats_title': "📊 *Глобальная статистика бота*",
+            'stats_total_users': "👥 Всего пользователей:",
+            'stats_active_users': "🏃 Активных за 7 дней:",
+            'stats_new_users': "🌱 Новых за 7 дней:",
+            'stats_blocked_users': "🚫 Заблокированных:",
+            # Управление пользователями
+            'user_management_title': "👤 *Управление пользователями*",
+            'user_management_prompt': "Введите User ID для получения информации:",
+            'user_info_title': "ℹ️ *Информация о пользователе*",
+            'user_info_id': "ID:",
+            'user_info_lang': "Язык:",
+            'user_info_reg_date': "Дата регистрации:",
+            'user_info_messages': "Сообщений:",
+            'user_info_status': "Статус:",
+            'user_status_active': "Активен",
+            'user_status_blocked': "Заблокирован",
+            'btn_block_user': "🚫 Заблокировать",
+            'btn_unblock_user': "✅ Разблокировать",
+            'btn_reset_user_api_key': "🔑 Сбросить API ключ",
+            'user_not_found': "❌ Пользователь с ID `{user_id}` не найден.",
+            'user_blocked_success': "✅ Пользователь `{user_id}` заблокирован.",
+            'user_unblocked_success': "✅ Пользователь `{user_id}` разблокирован.",
+            'user_api_key_reset_success': "✅ API ключ для пользователя `{user_id}` сброшен.",
+            # Коммуникация
+            'communication_title': "📬 *Коммуникация*",
+            'btn_broadcast': "📢 Рассылка всем",
+            'broadcast_prompt': "Отправьте сообщение, которое будет разослано всем пользователям. Для отмены введите /cancel.",
+            'broadcast_confirm_prompt': "Вы собираетесь отправить следующее сообщение `{count}` пользователям. Вы уверены?\n\n---\n{message_text}\n---",
+            'btn_confirm_broadcast': "Да, отправить",
+            'btn_cancel_broadcast': "Отмена",
+            'broadcast_started': "✅ Рассылка начата...",
+            'broadcast_cancelled': "❌ Рассылка отменена.",
+            'broadcast_finished': "✅ Рассылка завершена. Отправлено: {sent}. Не удалось: {failed}.",
+            'reply_to_user_prompt': "Ответить пользователю `{user_id}`:",
+            'reply_sent_success': "✅ Сообщение отправлено пользователю `{user_id}`.",
+            'reply_sent_fail': "❌ Не удалось отправить сообщение. Возможно, пользователь заблокировал бота.",
+            'reply_admin_notification': "✉️ *Сообщение от администратора:*\n\n`{text}`"
+        }
     },
     'en': {
         # --- Welcome and Help ---
@@ -152,7 +216,7 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         # --- Persona Selection ---
         'persona_selection_title': "🎭 *Assistant Persona Selection*",
         'persona_selection_desc': "Choose a role for the bot to play. This will change its communication style and expertise. Current *styles* (concise, detailed, etc.) will be ignored.",
-        # --- NEW: Dialog Management ---
+        # --- Dialog Management ---
         'dialogs_menu_title': "🗂️ *Dialog Management*",
         'dialogs_menu_desc': "Here you can create new dialogs, switch between them, rename, and delete. The active dialog is marked with ✅.",
         'btn_create_dialog': "➕ Create New",
@@ -203,6 +267,10 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'usage_estimated_cost': "💰 Estimated Cost",
         'usage_no_data': "No data to display.",
         'usage_cost_notice': "\n_The cost is an estimate based on the current model and public Google tariffs._",
+        # --- Feedback ---
+        'feedback_prompt': "Please describe the issue or your suggestion. This message will be sent to the administrator.",
+        'feedback_sent': "✅ Thank you! Your message has been sent to the administrator.",
+        'feedback_admin_notification': "⚠️ *New message from a user!*\n\n*From:* {user_id} (@{username})\n*Name:* {first_name}\n\n*Message:*\n`{text}`\n\n*To reply, use the command:* `/reply {user_id} `",
         # --- Errors ---
         'unsupported_content': "I don't know how to handle this type of content yet.",
         'state_wrong_content_type': "Please send text to complete the current action, or press /reset.",
@@ -215,8 +283,10 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'gemini_error_unavailable': "🛠️ *Service Temporarily Unavailable.*\nGoogle's servers might be overloaded. Please try again in a few minutes.",
         'gemini_error_invalid_argument': "🤔 *Error: Invalid Request.*\nYou might be trying to send content not supported by the model (e.g., a video).",
         'gemini_error_unknown': "🤯 *An unknown API error occurred.*\nPlease try again. If the error persists, contact the administrator.",
+        'user_is_blocked': "❌ You have been blocked by the administrator.",
+        'maintenance_mode_on': "🛠️ The bot is temporarily in maintenance mode. Please try again later.",
         # --- Buttons ---
-        'btn_dialogs': "🗂️ Dialogs", # NEW BUTTON
+        'btn_dialogs': "🗂️ Dialogs",
         'btn_translate': "🇬🇧 Translate",
         'btn_history': "📜 History",
         'btn_account': "👤 My Account",
@@ -224,6 +294,64 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'btn_help': "❓ Help",
         'btn_reset': "🔄 Reset",
         'btn_usage': "📊 Usage",
+        'btn_admin_panel': "👑 Admin Panel",
+        # --- Admin Section ---
+        'admin': {
+            'panel_title': "👑 *Admin Panel*",
+            'not_admin': "❌ You do not have permission to execute this command.",
+            # Menu
+            'btn_stats': "📊 Statistics",
+            'btn_communication': "📬 Communication",
+            'btn_user_management': "👤 User Management",
+            'btn_maintenance': "🛠️ Maintenance Mode",
+            'btn_back_to_admin_menu': "⬅️ Back to Admin Panel",
+            # Maintenance Mode
+            'maintenance_menu_title': "🛠️ *Maintenance Mode*",
+            'maintenance_status_on': "🟢 *Status:* ENABLED",
+            'maintenance_status_off': "🔴 *Status:* DISABLED",
+            'btn_maintenance_enable': "Enable",
+            'btn_maintenance_disable': "Disable",
+            'maintenance_enabled_msg': "✅ Maintenance mode is ENABLED. Only the admin can use the bot.",
+            'maintenance_disabled_msg': "✅ Maintenance mode is DISABLED. The bot is available to all users.",
+            # Statistics
+            'stats_title': "📊 *Global Bot Statistics*",
+            'stats_total_users': "👥 Total users:",
+            'stats_active_users': "🏃 Active in last 7 days:",
+            'stats_new_users': "🌱 New in last 7 days:",
+            'stats_blocked_users': "🚫 Blocked users:",
+            # User Management
+            'user_management_title': "👤 *User Management*",
+            'user_management_prompt': "Enter User ID for details:",
+            'user_info_title': "ℹ️ *User Information*",
+            'user_info_id': "ID:",
+            'user_info_lang': "Language:",
+            'user_info_reg_date': "Registration Date:",
+            'user_info_messages': "Messages:",
+            'user_info_status': "Status:",
+            'user_status_active': "Active",
+            'user_status_blocked': "Blocked",
+            'btn_block_user': "🚫 Block",
+            'btn_unblock_user': "✅ Unblock",
+            'btn_reset_user_api_key': "🔑 Reset API Key",
+            'user_not_found': "❌ User with ID `{user_id}` not found.",
+            'user_blocked_success': "✅ User `{user_id}` has been blocked.",
+            'user_unblocked_success': "✅ User `{user_id}` has been unblocked.",
+            'user_api_key_reset_success': "✅ API key for user `{user_id}` has been reset.",
+            # Communication
+            'communication_title': "📬 *Communication*",
+            'btn_broadcast': "📢 Broadcast to all",
+            'broadcast_prompt': "Send the message to be broadcast to all users. To cancel, type /cancel.",
+            'broadcast_confirm_prompt': "You are about to send the following message to `{count}` users. Are you sure?\n\n---\n{message_text}\n---",
+            'btn_confirm_broadcast': "Yes, send",
+            'btn_cancel_broadcast': "Cancel",
+            'broadcast_started': "✅ Broadcast initiated...",
+            'broadcast_cancelled': "❌ Broadcast cancelled.",
+            'broadcast_finished': "✅ Broadcast finished. Sent: {sent}. Failed: {failed}.",
+            'reply_to_user_prompt': "Reply to user `{user_id}`:",
+            'reply_sent_success': "✅ Message sent to user `{user_id}`.",
+            'reply_sent_fail': "❌ Failed to send message. The user may have blocked the bot.",
+            'reply_admin_notification': "✉️ *Message from the administrator:*\n\n`{text}`"
+        }
     }
 }
 
@@ -234,8 +362,36 @@ def get_text(key: str, lang_code: str) -> str:
     """
     Возвращает текст по ключу для указанного языка.
     Если ключ или язык не найден, возвращает ключ в виде строки.
+    Поддерживает вложенные ключи (например, 'admin.panel_title').
     """
     lang_dict = LOCALIZATION.get(lang_code)
     if lang_dict is None:
         lang_dict = LOCALIZATION.get(DEFAULT_LANG, {})
-    return lang_dict.get(key, key)
+    
+    # Обработка вложенных ключей
+    keys = key.split('.')
+    value = lang_dict
+    try:
+        for k in keys:
+            value = value[k]
+        if isinstance(value, str):
+            return value
+        else:
+            # Если по ключу лежит словарь, а не строка
+            return key
+    except KeyError:
+        # Пытаемся найти в словаре по умолчанию
+        default_dict = LOCALIZATION.get(DEFAULT_LANG, {})
+        value = default_dict
+        try:
+            for k in keys:
+                value = value[k]
+            if isinstance(value, str):
+                return value
+        except (KeyError, TypeError):
+            return key # Возвращаем сам ключ, если ничего не найдено
+    except TypeError:
+        # Если пытаемся получить ключ от не-словаря
+        return key
+
+    return key

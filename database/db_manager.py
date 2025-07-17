@@ -99,7 +99,16 @@ def setup_database_sync():
     conn = _get_db_connection()
     cursor = conn.cursor()
     try:
-        # Проверка и создание таблицы users
+        # --- Таблица app_settings ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        db_logger.info("Таблица 'app_settings' проверена/создана.")
+
+        # --- Таблица users ---
         cursor.execute("PRAGMA table_info(users)")
         user_columns = {col['name'] for col in cursor.fetchall()}
         if not user_columns:
@@ -113,16 +122,22 @@ def setup_database_sync():
                 language_code TEXT DEFAULT 'ru' NOT NULL,
                 gemini_model TEXT DEFAULT NULL,
                 active_persona TEXT DEFAULT 'default' NOT NULL,
-                active_dialog_id INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL
+                active_dialog_id INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL,
+                is_blocked INTEGER NOT NULL DEFAULT 0
             )""")
         else:
-            required_user_columns = {'active_dialog_id', 'active_persona'}
+            required_user_columns = {'active_dialog_id', 'active_persona', 'is_blocked'}
             missing_user_columns = required_user_columns - user_columns
             for col in missing_user_columns:
                 db_logger.info(f"Добавляем отсутствующий столбец '{col}' в 'users'...")
-                cursor.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT 'default' NOT NULL" if col == 'active_persona' else f"ALTER TABLE users ADD COLUMN {col} INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL")
+                if col == 'active_persona':
+                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT 'default' NOT NULL")
+                elif col == 'is_blocked':
+                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
+                else: # active_dialog_id
+                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL")
 
-        # Проверка и создание таблицы dialogs
+        # --- Таблица dialogs ---
         cursor.execute("PRAGMA table_info(dialogs)")
         if not cursor.fetchall():
             db_logger.info("Таблица 'dialogs' не найдена, создаем...")
@@ -136,7 +151,7 @@ def setup_database_sync():
             )""")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_dialogs_user ON dialogs (user_id)")
 
-        # Проверка и создание/миграция таблицы conversations
+        # --- Таблица conversations ---
         cursor.execute("PRAGMA table_info(conversations)")
         conversation_columns = {col['name'] for col in cursor.fetchall()}
         if not conversation_columns:
@@ -162,7 +177,7 @@ def setup_database_sync():
 
         conn.commit()
 
-        # Миграция пользователей без диалогов
+        # --- Миграция старых данных ---
         cursor.execute("SELECT user_id FROM users WHERE active_dialog_id IS NULL")
         users_to_migrate = cursor.fetchall()
         if users_to_migrate:
@@ -177,11 +192,9 @@ def setup_database_sync():
                 cursor.execute("UPDATE users SET active_dialog_id = ? WHERE user_id = ?", (new_dialog_id, user_id))
                 cursor.execute("UPDATE conversations SET dialog_id = ? WHERE user_id = ? AND dialog_id IS NULL", (new_dialog_id, user_id))
                 db_logger.info(f"Пользователь {user_id} успешно мигрирован. Создан диалог ID: {new_dialog_id}.")
-
-            # ИСПРАВЛЕНИЕ: Коммитим миграцию пользователей ПЕРЕД началом новой транзакции
             conn.commit()
 
-            # ИСПРАВЛЕНИЕ: Пересоздаем таблицу, чтобы сделать dialog_id NOT NULL
+            # Пересоздаем таблицу, чтобы сделать dialog_id NOT NULL
             db_logger.info("Пересоздание таблицы 'conversations', чтобы сделать столбец 'dialog_id' NOT NULL...")
             cursor.execute("PRAGMA foreign_keys=off")
             cursor.execute("BEGIN TRANSACTION")
@@ -207,7 +220,6 @@ def setup_database_sync():
     except Exception as e:
         db_logger.exception(f"Критическая ошибка при настройке/миграции базы данных: {e}")
         if conn: conn.rollback()
-        # ИСПРАВЛЕНИЕ: Пробрасываем исключение, чтобы приложение остановилось
         raise
     finally:
         if conn: conn.close()
@@ -348,13 +360,6 @@ async def get_conversation_history_by_date(dialog_id: int, history_date: datetim
     return [dict(row) for row in rows] if rows else []
 
 
-async def get_conversation_count(dialog_id: int) -> int:
-    """Получает количество сообщений в конкретном диалоге."""
-    query = "SELECT COUNT(*) FROM conversations WHERE dialog_id = ?"
-    count = await _execute_query(query, (dialog_id,))
-    return count if count is not None else 0
-
-
 async def get_total_user_message_count(user_id: int) -> int:
     """Получает общее количество сообщений пользователя во всех его диалогах."""
     query = "SELECT COUNT(*) FROM conversations WHERE user_id = ?"
@@ -374,11 +379,13 @@ async def get_user_bot_style(user_id: int) -> str:
     return result['bot_style'] if result else 'default'
 
 
-async def set_user_api_key(user_id: int, api_key: str):
+async def set_user_api_key(user_id: int, api_key: Optional[str]):
+    """Устанавливает или сбрасывает API-ключ пользователя."""
     await add_or_update_user(user_id)
-    encrypted_key = crypto_helpers.encrypt_data(api_key)
+    encrypted_key = crypto_helpers.encrypt_data(api_key) if api_key else None
     query = "UPDATE users SET api_key = ? WHERE user_id = ?"
     await _execute_query(query, (encrypted_key, user_id), is_write_operation=True)
+    db_logger.info(f"API-ключ для пользователя {user_id} {'установлен' if api_key else 'сброшен'}.")
 
 
 async def get_user_api_key(user_id: int) -> Optional[str]:
@@ -456,3 +463,77 @@ async def get_token_usage_by_period(user_id: int, period: str) -> Dict[str, int]
             'total_tokens': int(result_row[2])
         }
     return {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0}
+
+# --- НОВЫЕ ФУНКЦИИ ДЛЯ АДМИН-ПАНЕЛИ ---
+
+async def set_app_setting(key: str, value: str):
+    """Устанавливает или обновляет глобальную настройку приложения."""
+    query = "INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    await _execute_query(query, (key, value), is_write_operation=True)
+    db_logger.info(f"Глобальная настройка '{key}' установлена в значение '{value}'.")
+
+async def get_app_setting(key: str) -> Optional[str]:
+    """Получает значение глобальной настройки приложения."""
+    query = "SELECT value FROM app_settings WHERE key = ?"
+    result = await _execute_query(query, (key,), fetch_one=True)
+    return result['value'] if result else None
+
+async def is_user_blocked(user_id: int) -> bool:
+    """Проверяет, заблокирован ли пользователь."""
+    query = "SELECT is_blocked FROM users WHERE user_id = ?"
+    result = await _execute_query(query, (user_id,), fetch_one=True)
+    return result['is_blocked'] == 1 if result else False
+
+async def block_user(user_id: int):
+    """Блокирует пользователя."""
+    await _execute_query("UPDATE users SET is_blocked = 1 WHERE user_id = ?", (user_id,), is_write_operation=True)
+    db_logger.info(f"Пользователь {user_id} заблокирован.")
+
+async def unblock_user(user_id: int):
+    """Разблокирует пользователя."""
+    await _execute_query("UPDATE users SET is_blocked = 0 WHERE user_id = ?", (user_id,), is_write_operation=True)
+    db_logger.info(f"Пользователь {user_id} разблокирован.")
+
+async def get_all_user_ids() -> List[int]:
+    """Возвращает список ID всех пользователей."""
+    rows = await _execute_query("SELECT user_id FROM users", fetch_all=True)
+    return [row['user_id'] for row in rows] if rows else []
+
+async def get_total_users_count() -> int:
+    """Возвращает общее количество пользователей."""
+    count = await _execute_query("SELECT COUNT(*) FROM users")
+    return count if count is not None else 0
+
+async def get_blocked_users_count() -> int:
+    """Возвращает количество заблокированных пользователей."""
+    count = await _execute_query("SELECT COUNT(*) FROM users WHERE is_blocked = 1")
+    return count if count is not None else 0
+
+async def get_active_users_count(days: int = 7) -> int:
+    """Возвращает количество пользователей, отправлявших сообщения за последние N дней."""
+    start_date = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+    query = "SELECT COUNT(DISTINCT user_id) FROM conversations WHERE timestamp >= ?"
+    count = await _execute_query(query, (start_date.isoformat(),))
+    return count if count is not None else 0
+
+async def get_new_users_count(days: int = 7) -> int:
+    """Возвращает количество новых пользователей за последние N дней."""
+    start_date = datetime.date.today() - datetime.timedelta(days=days)
+    query = "SELECT COUNT(*) FROM users WHERE first_interaction_date >= ?"
+    count = await _execute_query(query, (start_date.strftime('%Y-%m-%d'),))
+    return count if count is not None else 0
+
+async def get_user_info_for_admin(user_id: int) -> Optional[Dict[str, Any]]:
+    """Собирает подробную информацию о пользователе для админ-панели."""
+    query = """
+        SELECT
+            u.user_id,
+            u.language_code,
+            u.first_interaction_date,
+            u.is_blocked,
+            (SELECT COUNT(*) FROM conversations WHERE user_id = u.user_id) as message_count
+        FROM users u
+        WHERE u.user_id = ?
+    """
+    row = await _execute_query(query, (user_id,), fetch_one=True)
+    return dict(row) if row else None
