@@ -1,5 +1,7 @@
 # MyGemini: Ваш личный Telegram-ассистент на базе Gemini
 
+### [English version README](readme_en.md)
+
 [
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg?style=flat-square)
 ](https://www.python.org/downloads/)
