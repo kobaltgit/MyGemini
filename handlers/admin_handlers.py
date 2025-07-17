@@ -466,9 +466,16 @@ async def handle_export_users(call: types.CallbackQuery, bot: AsyncTeleBot):
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
         file_name = f"users_export_{timestamp}.csv"
         
-        input_file = types.InputFile(io.BytesIO(file_data), filename=file_name)
+        # ИСПРАВЛЕНИЕ: Убираем filename из конструктора InputFile
+        input_file = types.InputFile(io.BytesIO(file_data))
         
-        await bot.send_document(admin_id, input_file, caption="✅ Выгрузка данных пользователей завершена.")
+        # ИСПРАВЛЕНИЕ: Добавляем имя файла в метод send_document
+        await bot.send_document(
+            admin_id, 
+            input_file, 
+            caption="✅ Выгрузка данных пользователей завершена.",
+            visible_file_name=file_name
+        )
         await bot.delete_message(admin_id, status_msg.message_id)
 
     except Exception as e:
