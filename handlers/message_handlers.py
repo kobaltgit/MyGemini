@@ -130,6 +130,14 @@ async def _handle_state_api_key(message: types.Message, bot: AsyncTeleBot):
     except Exception: pass
     if is_valid:
         await db_manager.set_user_api_key(user_id, api_key)
+
+        # ---> НАЧАЛО ИСПРАВЛЕНИЯ <---
+        # Сбрасываем кэш текущего диалога, чтобы убрать из него сообщения "установите ключ"
+        active_dialog_id = await db_manager.get_active_dialog_id(user_id)
+        if active_dialog_id:
+            gemini_service.reset_dialog_chat(active_dialog_id)
+        # ---> КОНЕЦ ИСПРАВЛЕНИЯ <---
+
         await bot.delete_state(message.from_user.id, message.chat.id)
         text = loc.get_text('api_key_success', lang_code)
         await bot.send_message(user_id, text, reply_markup=mk.create_main_keyboard(lang_code, user_id))
