@@ -12,7 +12,9 @@ from chatgpt_md_converter import telegram_format
 from config.settings import ADMIN_USER_ID
 from logger_config import get_logger
 from utils import text_helpers as th
-from utils import markup_helpers as mk # <-- НОВЫЙ ИМПОРТ
+from utils import markup_helpers as mk
+from utils import localization as loc # <-- НОВЫЙ ИМПОРТ
+from database import db_manager   # <-- НОВЫЙ ИМПОРТ
 
 # Получаем логгер для этого модуля
 logger = get_logger(__name__)
@@ -80,7 +82,6 @@ async def send_error_reply(bot: AsyncTeleBot, message: types.Message, error_log_
     logger.exception(error_log_message, extra={'user_id': str(user_id)})
 
     try:
-        # ИЗМЕНЕНИЕ: Добавляем кнопку "Сообщить об ошибке"
         error_report_markup = mk.create_error_report_button()
         await bot.send_message(user_id, user_reply_text, parse_mode=None, reply_markup=error_report_markup)
     except apihelper.ApiException as e:
@@ -134,3 +135,31 @@ async def edit_message_reply_markup_safe(bot: AsyncTeleBot, chat_id: int, messag
         await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
     except apihelper.ApiException as e:
         logger.debug(f"Не удалось отредактировать клавиатуру у сообщения {message_id}: {e}", extra={'user_id': str(chat_id)})
+
+
+# --- НОВАЯ ОБЩАЯ ФУНКЦИЯ ДЛЯ АДМИНКИ ---
+
+async def get_user_info_text(user_id_to_check: int, lang_code: str) -> str:
+    """
+    Формирует текст с информацией о пользователе для админ-панели.
+
+    Args:
+        user_id_to_check: ID пользователя для поиска.
+        lang_code: Языковой код администратора для локализации текста.
+
+    Returns:
+        Отформатированная строка с информацией о пользователе или сообщение об ошибке.
+    """
+    user_info = await db_manager.get_user_info_for_admin(user_id_to_check)
+    if not user_info:
+        return loc.get_text('admin.user_not_found', lang_code).format(user_id=user_id_to_check)
+
+    status = loc.get_text('admin.user_status_blocked', lang_code) if user_info['is_blocked'] else loc.get_text('admin.user_status_active', lang_code)
+
+    info_text = (f"{loc.get_text('admin.user_info_title', lang_code)}\n\n"
+                 f"*{loc.get_text('admin.user_info_id', lang_code)}* `{user_info['user_id']}`\n"
+                 f"*{loc.get_text('admin.user_info_lang', lang_code)}* `{user_info['language_code']}`\n"
+                 f"*{loc.get_text('admin.user_info_reg_date', lang_code)}* `{user_info['first_interaction_date']}`\n"
+                 f"*{loc.get_text('admin.user_info_messages', lang_code)}* `{user_info['message_count']}`\n"
+                 f"*{loc.get_text('admin.user_info_status', lang_code)}* {status}")
+    return info_text
