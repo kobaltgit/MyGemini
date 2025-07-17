@@ -166,6 +166,9 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
             # Коммуникация
             'communication_title': "📬 *Коммуникация*",
             'btn_broadcast': "📢 Рассылка всем",
+            'btn_reply_to_user': "✉️ Ответить пользователю",
+            'reply_prompt_user_id': "Введите User ID пользователя, которому вы хотите отправить сообщение:",
+            'reply_prompt_message': "Теперь введите сообщение для пользователя `{user_id}`:",
             'broadcast_prompt': "Отправьте сообщение, которое будет разослано всем пользователям. Для отмены введите /cancel.",
             'broadcast_confirm_prompt': "Вы собираетесь отправить следующее сообщение `{count}` пользователям. Вы уверены?\n\n---\n{message_text}\n---",
             'btn_confirm_broadcast': "Да, отправить",
@@ -342,6 +345,9 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
             # Communication
             'communication_title': "📬 *Communication*",
             'btn_broadcast': "📢 Broadcast to all",
+            'btn_reply_to_user': "✉️ Reply to User",
+            'reply_prompt_user_id': "Enter the User ID of the user you want to message:",
+            'reply_prompt_message': "Now enter the message for user `{user_id}`:",
             'broadcast_prompt': "Send the message to be broadcast to all users. To cancel, type /cancel.",
             'broadcast_confirm_prompt': "You are about to send the following message to `{count}` users. Are you sure?\n\n---\n{message_text}\n---",
             'btn_confirm_broadcast': "Yes, send",

@@ -16,7 +16,8 @@ from config.settings import (
     STATE_WAITING_FOR_TRANSLATE_TEXT, STATE_WAITING_FOR_API_KEY,
     STATE_WAITING_FOR_NEW_DIALOG_NAME, STATE_WAITING_FOR_RENAME_DIALOG,
     STATE_WAITING_FOR_FEEDBACK, GEMINI_MODEL_NAME, BOT_PERSONAS, ADMIN_USER_ID,
-    STATE_ADMIN_WAITING_FOR_BROADCAST_MSG, STATE_ADMIN_WAITING_FOR_USER_ID_TO_MANAGE
+    STATE_ADMIN_WAITING_FOR_BROADCAST_MSG, STATE_ADMIN_WAITING_FOR_USER_ID_TO_MANAGE,
+    STATE_ADMIN_WAITING_FOR_USER_ID_TO_REPLY, STATE_ADMIN_WAITING_FOR_REPLY_MESSAGE
 )
 from database import db_manager
 from services import gemini_service
@@ -112,6 +113,71 @@ async def _handle_state_admin_user_id_manage(message: types.Message, bot: AsyncT
         ))
 
     await bot.send_message(admin_id, user_info_text, reply_markup=keyboard, parse_mode="Markdown")
+
+@admin_required
+async def _handle_state_user_id_for_reply(message: types.Message, bot: AsyncTeleBot):
+    """
+    Логика для состояния STATE_ADMIN_WAITING_FOR_USER_ID_TO_REPLY.
+    Проверяет ID и запрашивает сообщение для отправки.
+    """
+    admin_id = message.from_user.id
+    lang_code = await db_manager.get_user_language(admin_id)
+
+    if not message.text.isdigit():
+        await bot.reply_to(message, "Ошибка: User ID должен быть числом. Попробуйте еще раз или введите /cancel для отмены.")
+        return
+
+    target_user_id = int(message.text)
+    
+    # Проверяем, существует ли такой пользователь в базе
+    user_info = await db_manager.get_user_info_for_admin(target_user_id)
+    if not user_info:
+        await bot.reply_to(message, loc.get_text('admin.user_not_found', lang_code).format(user_id=target_user_id))
+        await bot.delete_state(admin_id, admin_id)
+        await handle_admin_command(message, bot) # Возвращаем в главное меню админки
+        return
+
+    # Сохраняем ID в данные состояния и переходим к следующему шагу
+    await bot.add_data(admin_id, admin_id, target_user_id=target_user_id)
+    await bot.set_state(admin_id, STATE_ADMIN_WAITING_FOR_REPLY_MESSAGE, admin_id)
+
+    # Запрашиваем текст сообщения
+    await bot.send_message(admin_id, loc.get_text('admin.reply_prompt_message', lang_code).format(user_id=target_user_id))
+
+
+@admin_required
+async def _handle_state_message_to_user(message: types.Message, bot: AsyncTeleBot):
+    """
+    Логика для состояния STATE_ADMIN_WAITING_FOR_REPLY_MESSAGE.
+    Отправляет полученное сообщение целевому пользователю.
+    """
+    admin_id = message.from_user.id
+    lang_code = await db_manager.get_user_language(admin_id)
+    text_to_send = message.text
+
+    async with bot.retrieve_data(admin_id, admin_id) as data:
+        target_user_id = data.get('target_user_id')
+
+    if not target_user_id:
+        logger.error(f"Не найден target_user_id в состоянии для админа {admin_id}")
+        await bot.delete_state(admin_id, admin_id)
+        await bot.send_message(admin_id, "Произошла внутренняя ошибка, не удалось найти ID получателя.")
+        return
+
+    # Получаем язык целевого пользователя для корректной локализации уведомления
+    target_lang_code = await db_manager.get_user_language(target_user_id)
+    notification_text = loc.get_text('admin.reply_admin_notification', target_lang_code).format(text=text_to_send)
+
+    try:
+        await bot.send_message(target_user_id, notification_text, parse_mode='Markdown')
+        await bot.send_message(admin_id, loc.get_text('admin.reply_sent_success', lang_code).format(user_id=target_user_id))
+        logger.info(f"Администратор {admin_id} отправил сообщение пользователю {target_user_id} через меню.")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке сообщения от админа {admin_id} пользователю {target_user_id}: {e}")
+        await bot.send_message(admin_id, loc.get_text('admin.reply_sent_fail', lang_code))
+    finally:
+        # Завершаем процесс и выходим из состояния
+        await bot.delete_state(admin_id, admin_id)
 
 # --- Пользовательские состояния ---
 
@@ -321,6 +387,10 @@ async def universal_message_router(message: types.Message, bot: AsyncTeleBot):
             await _handle_state_admin_broadcast(message, bot)
         elif current_state == STATE_ADMIN_WAITING_FOR_USER_ID_TO_MANAGE:
             await _handle_state_admin_user_id_manage(message, bot)
+        elif current_state == STATE_ADMIN_WAITING_FOR_USER_ID_TO_REPLY:
+            await _handle_state_user_id_for_reply(message, bot)
+        elif current_state == STATE_ADMIN_WAITING_FOR_REPLY_MESSAGE:
+            await _handle_state_message_to_user(message, bot)
         elif current_state == STATE_WAITING_FOR_API_KEY:
             await _handle_state_api_key(message, bot)
         elif current_state == STATE_WAITING_FOR_TRANSLATE_TEXT:

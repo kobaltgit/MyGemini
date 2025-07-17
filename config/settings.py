@@ -162,6 +162,7 @@ CALLBACK_ADMIN_MAINTENANCE_MENU = 'admin_maintenance_menu'
 # Communication
 CALLBACK_ADMIN_COMMUNICATION_MENU = 'admin_communication_menu'
 CALLBACK_ADMIN_BROADCAST = 'admin_broadcast'
+CALLBACK_ADMIN_REPLY_TO_USER = 'admin_reply_to_user'
 CALLBACK_ADMIN_CONFIRM_BROADCAST = 'admin_confirm_broadcast'
 CALLBACK_ADMIN_CANCEL_BROADCAST = 'admin_cancel_broadcast'
 # User Management
@@ -187,8 +188,10 @@ STATE_WAITING_FOR_RENAME_DIALOG = 'waiting_for_rename_dialog'
 # --- НОВЫЕ СОСТОЯНИЯ ДЛЯ АДМИН-ПАНЕЛИ ---
 STATE_ADMIN_WAITING_FOR_BROADCAST_MSG = 'admin_waiting_for_broadcast_msg'
 STATE_ADMIN_WAITING_FOR_USER_ID_TO_MANAGE = 'admin_waiting_for_user_id_manage'
+STATE_ADMIN_WAITING_FOR_USER_ID_TO_REPLY = 'admin_waiting_for_user_id_reply'
+STATE_ADMIN_WAITING_FOR_REPLY_MESSAGE = 'admin_waiting_for_reply_message'
 STATE_ADMIN_WAITING_FOR_USER_ID_TO_MESSAGE = 'admin_waiting_for_user_id_message'
-STATE_ADMIN_WAITING_FOR_MESSAGE_TO_USER = 'admin_waiting_for_message_to_user'
+# STATE_ADMIN_WAITING_FOR_MESSAGE_TO_USER = 'admin_waiting_for_message_to_user'
 
 
 print(f"Конфигурация MyGemini/settings.py загружена. Модель Gemini: {GEMINI_MODEL_NAME}")

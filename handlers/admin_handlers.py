@@ -17,6 +17,7 @@ from config.settings import (
     CALLBACK_ADMIN_MAINTENANCE_MENU, CALLBACK_ADMIN_COMMUNICATION_MENU,
     CALLBACK_ADMIN_BROADCAST, STATE_ADMIN_WAITING_FOR_BROADCAST_MSG,
     CALLBACK_ADMIN_CONFIRM_BROADCAST, CALLBACK_ADMIN_CANCEL_BROADCAST,
+    CALLBACK_ADMIN_REPLY_TO_USER, STATE_ADMIN_WAITING_FOR_USER_ID_TO_REPLY,
     CALLBACK_ADMIN_STATS_MENU, CALLBACK_ADMIN_USER_MANAGEMENT_MENU,
     STATE_ADMIN_WAITING_FOR_USER_ID_TO_MANAGE,
     CALLBACK_ADMIN_TOGGLE_BLOCK_PREFIX, CALLBACK_ADMIN_RESET_API_KEY_PREFIX,
@@ -449,6 +450,27 @@ async def handle_export_users(call: types.CallbackQuery, bot: AsyncTeleBot):
         logger.exception(f"Ошибка при экспорте пользователей: {e}", extra={'user_id': str(admin_id)})
         await bot.edit_message_text("❌ Произошла ошибка при создании файла.", admin_id, status_msg.message_id)
 
+@admin_required
+async def handle_reply_to_user_start(call: types.CallbackQuery, bot: AsyncTeleBot):
+    """
+    Начинает процесс отправки сообщения конкретному пользователю.
+    Запрашивает у админа User ID.
+    """
+    admin_id = call.from_user.id
+    lang_code = await db_manager.get_user_language(admin_id)
+
+    # Переводим админа в состояние ожидания User ID
+    await bot.set_state(admin_id, STATE_ADMIN_WAITING_FOR_USER_ID_TO_REPLY, admin_id)
+    
+    # Редактируем сообщение, запрашивая ID
+    await tg_helpers.edit_message_text_safe(
+        bot,
+        chat_id=admin_id,
+        message_id=call.message.message_id,
+        text=loc.get_text('admin.reply_prompt_user_id', lang_code),
+        reply_markup=None # Убираем кнопки
+    )
+    await bot.answer_callback_query(call.id)
 
 def register_admin_handlers(bot: AsyncTeleBot):
     """
@@ -477,6 +499,7 @@ def register_admin_handlers(bot: AsyncTeleBot):
     # Действия
     bot.register_callback_query_handler(handle_toggle_maintenance, func=lambda call: call.data.startswith(CALLBACK_ADMIN_TOGGLE_MAINTENANCE), pass_bot=True)
     bot.register_callback_query_handler(handle_broadcast_start, func=lambda call: call.data == CALLBACK_ADMIN_BROADCAST, pass_bot=True)
+    bot.register_callback_query_handler(handle_reply_to_user_start, func=lambda call: call.data == CALLBACK_ADMIN_REPLY_TO_USER, pass_bot=True)
     bot.register_callback_query_handler(handle_broadcast_confirm, func=lambda call: call.data == CALLBACK_ADMIN_CONFIRM_BROADCAST, pass_bot=True)
     bot.register_callback_query_handler(handle_broadcast_cancel, func=lambda call: call.data == CALLBACK_ADMIN_CANCEL_BROADCAST, pass_bot=True)
     bot.register_callback_query_handler(handle_toggle_block_user, func=lambda call: call.data.startswith(CALLBACK_ADMIN_TOGGLE_BLOCK_PREFIX), pass_bot=True)

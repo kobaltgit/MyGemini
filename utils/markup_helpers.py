@@ -307,11 +307,15 @@ async def create_communication_menu_keyboard(lang_code: str) -> types.InlineKeyb
         loc.get_text('admin.btn_broadcast', lang_code),
         callback_data=CALLBACK_ADMIN_BROADCAST
     )
+    reply_btn = types.InlineKeyboardButton(
+        loc.get_text('admin.btn_reply_to_user', lang_code),
+        callback_data='admin_reply_to_user' # Используем callback из settings.py
+    )
     back_btn = types.InlineKeyboardButton(
         loc.get_text('admin.btn_back_to_admin_menu', lang_code),
         callback_data=CALLBACK_ADMIN_MAIN_MENU
     )
-    markup.add(broadcast_btn, back_btn)
+    markup.add(broadcast_btn, reply_btn, back_btn)
     return markup
 
 def create_broadcast_confirmation_keyboard(lang_code: str) -> types.InlineKeyboardMarkup:
