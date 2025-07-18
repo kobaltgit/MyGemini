@@ -65,6 +65,7 @@ The bot is designed with an emphasis on privacy and flexibility. You can conduct
     *   **Language Change:** The bot's interface supports Russian and English languages.
 *   **Intelligent Communication:** Answers to questions and text generation based on the Google Gemini model, taking into account the selected persona and dialogue history.
 *   **Image Analysis:** Recognition and description of image content with the ability to ask a clarifying question.
+*   **Internet Search:** To provide up-to-date information, the bot can access Google Search. This feature is enabled automatically if the selected model supports it. Currently, search is available for the following models: `gemini-2.0-flash`, `gemini-2.5-flash`, `gemini-2.0-pro-experimental`, and `gemini-2.5-pro`.
 *   **Detailed Help:** Built-in guide (`/help_guide`) helps new users get started quickly, including a step-by-step guide on obtaining an API key.
 *   **Personal Account and Statistics:**
     *   `/account`: View your "title" in the bot, overall statistics, and a brief analysis of topics in the current dialogue.
