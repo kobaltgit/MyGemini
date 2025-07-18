@@ -93,9 +93,11 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'usage_no_data': "Нет данных для отображения.",
         'usage_cost_notice': "\n_Стоимость является приблизительной и рассчитывается на основе текущей модели и публичных тарифов Google._",
         # --- Обратная связь ---
-        'feedback_prompt': "Пожалуйста, опишите проблему или ваше предложение. Это сообщение будет отправлено администратору.",
+        'feedback_prompt': "Пожалуйста, скопируйте текст ошибки и вставьте в сообщение, опишите проблему или ваше предложение. Это сообщение будет отправлено администратору.",
         'feedback_sent': "✅ Спасибо! Ваше сообщение отправлено администратору.",
-        'feedback_admin_notification': "⚠️ *Новое сообщение от пользователя!*\n\n*От:* {user_id} (@{username})\n*Имя:* {first_name}\n\n*Сообщение:*\n`{text}`\n\n*Для ответа используйте команду:* `/reply {user_id} `",
+
+        'feedback_admin_notification': "⚠️ *Новое сообщение от пользователя\\!*\n\n*От:* `{user_id}` \\(@{username}\\)\n*Имя:* {first_name}\n\n*Сообщение:*\n{text}\n\n*Для ответа используйте команду:* `/reply {user_id}`",
+
         # --- Поддержка ---
         'support_prompt': "Если вам нравится бот и вы хотите поддержать его развитие, вы можете сделать небольшой донат:",
         # --- Ошибки ---
@@ -108,7 +110,6 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'gemini_error_quota_exceeded': "⏳ *Ошибка: Превышена квота.*\nВы исчерпали лимит запросов к API. Попробуйте позже или проверьте лимиты в вашей учетной записи Google.",
         'gemini_error_safety': "censored:censored_black_rectangle: *Ответ заблокирован.*\nСгенерированный ответ был заблокирован настройками безопасности Google. Попробуйте переформулировать запрос.",
         'gemini_error_unavailable': "🛠️ *Сервис временно недоступен.*\nСерверы Google могут быть перегружены. Пожалуйста, повторите попытку через несколько минут.",
-        'gemini_error_search_not_supported': "🚫 *Поиск не поддерживается.*\nВаша текущая модель (`{model_name}`) не умеет искать информацию в интернете. Вы можете сменить модель в /settings.",
         'gemini_error_invalid_argument': "🤔 *Ошибка: Некорректный запрос.*\nВозможно, вы пытаетесь отправить контент, который не поддерживается выбранной моделью (например, видео).",
         'gemini_error_unknown': "🤯 *Произошла неизвестная ошибка при обращении к API.*\nПожалуйста, попробуйте еще раз. Если ошибка повторяется, свяжитесь с администратором.",
         'user_is_blocked': "❌ Вы были заблокированы администратором.",
@@ -276,9 +277,11 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'usage_no_data': "No data to display.",
         'usage_cost_notice': "\n_The cost is an estimate based on the current model and public Google tariffs._",
         # --- Feedback ---
-        'feedback_prompt': "Please describe the issue or your suggestion. This message will be sent to the administrator.",
+        'feedback_prompt': "Please copy the error text and paste it into the message, then describe the problem or your suggestion. This message will be sent to the administrator.",
         'feedback_sent': "✅ Thank you! Your message has been sent to the administrator.",
-        'feedback_admin_notification': "⚠️ *New message from a user!*\n\n*From:* {user_id} (@{username})\n*Name:* {first_name}\n\n*Message:*\n`{text}`\n\n*To reply, use the command:* `/reply {user_id} `",
+
+        'feedback_admin_notification': "⚠️ *New message from a user\\!*\n\n*From:* `{user_id}` \\(@{username}\\)\n*Name:* {first_name}\n\n*Message:*\n{text}\n\n*To reply, use the command:* `/reply {user_id}`",
+        
         # --- Support ---
         'support_prompt': "If you like the bot and wish to support its development, you can make a small donation:",
         # --- Errors ---
@@ -291,7 +294,6 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'gemini_error_quota_exceeded': "⏳ *Error: Quota Exceeded.*\nYou have exhausted your API request limit. Try again later or check your Google account limits.",
         'gemini_error_safety': "censored:censored_black_rectangle: *Response Blocked.*\nThe generated response was blocked by Google's safety settings. Try rephrasing your request.",
         'gemini_error_unavailable': "🛠️ *Service Temporarily Unavailable.*\nGoogle's servers might be overloaded. Please try again in a few minutes.",
-        'gemini_error_search_not_supported': "🚫 *Search Not Supported.*\nYour current model (`{model_name}`) cannot search the internet. You can change the model in /settings.",
         'gemini_error_invalid_argument': "🤔 *Error: Invalid Request.*\nYou might be trying to send content not supported by the model (e.g., a video).",
         'gemini_error_unknown': "🤯 *An unknown API error occurred.*\nPlease try again. If the error persists, contact the administrator.",
         'user_is_blocked': "❌ You have been blocked by the administrator.",

@@ -2,13 +2,13 @@
 import asyncio
 import aiohttp
 import PIL.Image
-from typing import List, Union, Dict, Optional, Any
+from typing import List, Union, Dict, Optional, Any, Tuple
 from io import BytesIO
 import base64
 import re
 from cachetools import LRUCache
 
-from config.settings import DEFAULT_MODEL_ID, GENERATION_CONFIG, SAFETY_SETTINGS, BOT_PERSONAS, BOT_STYLES
+from config.settings import DEFAULT_MODEL_ID, GENERATION_CONFIG, MODELS_METADATA, SAFETY_SETTINGS, BOT_PERSONAS, BOT_STYLES
 from utils import guide_manager
 from logger_config import get_logger
 from database import db_manager
@@ -125,12 +125,12 @@ def reset_dialog_chat(dialog_id: int):
 
 async def _get_system_instruction_text(user_id: int) -> Optional[str]:
     """
-    Формирует полный текст системной инструкции, включая персону/стиль
-    и полное руководство по функциям бота на языке пользователя.
+    Формирует текст системной инструкции, включая персону или стиль.
+    Полное руководство по боту было убрано, чтобы не превышать лимит токенов.
     """
     lang_code = await db_manager.get_user_language(user_id)
     
-    # --- Часть 1: Инструкция по поведению (персона или стиль) ---
+    # --- Инструкция по поведению (персона или стиль) ---
     persona_prompt = ""
     persona_id = await db_manager.get_user_persona(user_id)
 
@@ -151,46 +151,12 @@ async def _get_system_instruction_text(user_id: int) -> Optional[str]:
             }
             persona_prompt = style_prompts.get(style_id, "")
 
-    # --- Часть 2: Справка по боту для ответов на вопросы о себе ---
-    full_guide_text = guide_manager.get_full_guide(lang_code)
-    
-    # Удаляем Markdown ссылки с картинками, чтобы не загромождать контекст
-    full_guide_text = re.sub(r'!\[.*?\]\(.*?\)', '', full_guide_text)
+    return persona_prompt.strip() if persona_prompt else None
 
-    # --- Шаблоны промптов для разных языков ---
-    prompt_templates = {
-        'ru': f"""
----
-Дополнительный контекст: Ты — Telegram-бот, и у тебя есть встроенные функции, описанные ниже. Используй эту информацию, чтобы отвечать на вопросы пользователя о твоих возможностях, командах или процессе получения API-ключа. Всегда отвечай от первого лица ("Я могу...", "Используй команду /settings...").
-
-{full_guide_text}
----
-""",
-        'en': f"""
----
-Additional context: You are a Telegram bot, and you have built-in features described below. Use this information to answer user questions about your capabilities, commands, or the process of obtaining an API key. Always answer in the first person ("I can...", "Use the /settings command...").
-
-{full_guide_text}
----
-"""
-    }
-    
-    # Выбираем шаблон по языку пользователя, с фоллбэком на русский
-    guide_prompt = prompt_templates.get(lang_code, prompt_templates['ru']).strip()
-
-    # --- Сборка финального промпта ---
-    final_prompt = ""
-    if persona_prompt:
-        final_prompt += persona_prompt.strip() + "\n\n"
-    
-    final_prompt += guide_prompt
-    
-    return final_prompt.strip() if final_prompt else None
-
-async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL.Image.Image]]]) -> str:
+async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL.Image.Image]]]) -> Tuple[str, List[Dict[str, str]]]:
     """
-    Генерирует ответ от Gemini, учитывая активный диалог и персону.
-    Всегда пытается использовать поиск в интернете.
+    Генерирует ответ от Gemini, динамически включая функции.
+    Для моделей Gemma история диалога игнорируется для совместимости.
     """
     api_key = await db_manager.get_user_api_key(user_id)
     if not api_key:
@@ -201,13 +167,26 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
         gemini_logger.error(f"У пользователя {user_id} нет активного диалога для генерации ответа.")
         raise GeminiAPIError("Не найден активный диалог. Пожалуйста, перезапустите бота командой /start.", details={})
 
-    history = await _get_dialog_chat_history(active_dialog_id)
     model_name = await db_manager.get_user_gemini_model(user_id) or DEFAULT_MODEL_ID
+    
+    # Проверяем, является ли модель Gemma для специальной обработки
+    is_gemma_model = model_name.startswith('gemma')
+    
+    # Загружаем историю только для моделей, не являющихся Gemma
+    history = []
+    if not is_gemma_model:
+        history = await _get_dialog_chat_history(active_dialog_id)
+    
+    # Получаем метаданные модели из нашего словаря-справочника
+    model_meta = MODELS_METADATA.get(model_name, {})
+    use_search = model_meta.get("supports_search", False)
+    use_system_instruction = model_meta.get("supports_system_instruction", False)
 
-    gemini_logger.info(f"Генерация ответа для user_id: {user_id}, диалог: {active_dialog_id}, модель: {model_name}, поиск: True", extra={'user_id': str(user_id)})
+    gemini_logger.info(f"Генерация: user={user_id}, model={model_name}, search={use_search}, system_instr={use_system_instruction}, stateless={is_gemma_model}", extra={'user_id': str(user_id)})
 
     request_contents = list(history)
-
+    
+    # Формируем тело запроса от пользователя
     user_message_for_db = ""
     user_parts = []
     if isinstance(prompt, str):
@@ -227,72 +206,80 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
         if text_part:
             user_parts.append({"text": text_part})
         user_message_for_db = f"[Изображение] {text_part}".strip()
-
+    
     request_contents.append({"role": "user", "parts": user_parts})
-
     await db_manager.store_message(user_id, active_dialog_id, 'user', user_message_for_db)
 
     url = f"{GEMINI_API_BASE_URL}/models/{model_name}:generateContent"
 
-    # Собираем payload, по умолчанию включая инструмент поиска
+    # Собираем payload, базовую часть
     payload = {
         "contents": request_contents,
         "generationConfig": GENERATION_CONFIG,
-        "safetySettings": SAFETY_SETTINGS,
-        **GOOGLE_SEARCH_TOOL
+        "safetySettings": SAFETY_SETTINGS
     }
-
-    system_instruction_text = await _get_system_instruction_text(user_id)
-    if system_instruction_text:
-        payload["system_instruction"] = { "parts": [{"text": system_instruction_text}] }
+    
+    # Условно добавляем инструменты и системные инструкции
+    if use_search:
+        payload.update(GOOGLE_SEARCH_TOOL)
+    
+    if use_system_instruction:
+        system_instruction_text = await _get_system_instruction_text(user_id)
+        if system_instruction_text:
+            payload["system_instruction"] = { "parts": [{"text": system_instruction_text}] }
 
     try:
         response_json = await _make_gemini_request_async(api_key, url, payload)
 
-    except GeminiAPIError as e:
-        # Если ошибка связана с тем, что модель не поддерживает поиск,
-        # попробуем сделать запрос еще раз, но уже без инструмента поиска.
-        if e.error_key == "gemini_error_search_not_supported":
-            gemini_logger.warning(f"Модель {model_name} не поддерживает поиск. Повторный запрос без tools.", extra={'user_id': str(user_id)})
-            payload.pop("tools", None) # Удаляем ключ tools
-            try:
-                # Вторая попытка запроса
-                response_json = await _make_gemini_request_async(api_key, url, payload)
-            except GeminiAPIError as final_e:
-                 if history: history.pop() # Удаляем неверный запрос из кеша
-                 raise final_e # Пробрасываем ошибку второй попытки
-        else:
-            # Для всех других ошибок API
-            if history: history.pop() # Удаляем неверный запрос из кеша
-            raise e # Пробрасываем ошибку
+        if not response_json or "candidates" not in response_json:
+            raise GeminiAPIError("Ответ API не содержит 'candidates'.", details=response_json)
 
-    # Обработка успешного ответа (с первой или второй попытки)
-    if not response_json or "candidates" not in response_json:
-        raise GeminiAPIError("Ответ API не содержит 'candidates'.", details=response_json)
+        first_candidate = response_json["candidates"][0]
 
-    if response_json["candidates"][0].get("finishReason") == "SAFETY":
-         raise GeminiAPIError("Ответ заблокирован настройками безопасности.", details={"finish_reason": "SAFETY"})
+        if first_candidate.get("finishReason") == "SAFETY":
+             raise GeminiAPIError("Ответ заблокирован настройками безопасности.", details={"finish_reason": "SAFETY"})
 
-    response_text = response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+        response_text = first_candidate["content"]["parts"][0]["text"].strip()
+        
+        # Извлекаем источники из метаданных
+        sources = []
+        metadata = first_candidate.get('groundingMetadata', {})
+        if 'groundingAttributions' in metadata:
+            for attr in metadata['groundingAttributions']:
+                if 'web' in attr and attr['web'].get('uri') and attr['web'].get('title'):
+                    sources.append({"uri": attr['web']['uri'], "title": attr['web']['title']})
+        elif 'groundingChunks' in metadata:
+            for chunk in metadata['groundingChunks']:
+                if 'web' in chunk and chunk['web'].get('uri') and chunk['web'].get('title'):
+                    source_item = {"uri": chunk['web']['uri'], "title": chunk['web']['title']}
+                    if source_item not in sources:
+                        sources.append(source_item)
+        
+        # Обновляем кеш истории только для моделей, поддерживающих контекст
+        if not is_gemma_model:
+            history.append({"role": "user", "parts": user_parts})
+            history.append({"role": "model", "parts": [{"text": response_text}]})
 
-    history.append({"role": "user", "parts": user_parts})
-    history.append({"role": "model", "parts": [{"text": response_text}]})
+        # Сохраняем информацию о токенах
+        usage_metadata = response_json.get('usageMetadata', {})
+        prompt_tokens = usage_metadata.get('promptTokenCount', 0)
+        completion_tokens = usage_metadata.get('candidatesTokenCount', 0)
+        total_tokens = usage_metadata.get('totalTokenCount', 0)
 
-    usage_metadata = response_json.get('usageMetadata', {})
-    prompt_tokens = usage_metadata.get('promptTokenCount', 0)
-    completion_tokens = usage_metadata.get('candidatesTokenCount', 0)
-    total_tokens = usage_metadata.get('totalTokenCount', 0)
+        await db_manager.store_message(
+            user_id=user_id, dialog_id=active_dialog_id, role='bot',
+            message_text=response_text, prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens, total_tokens=total_tokens
+        )
+        
+        return response_text, sources
 
-    await db_manager.store_message(
-        user_id=user_id,
-        dialog_id=active_dialog_id,
-        role='bot',
-        message_text=response_text,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        total_tokens=total_tokens
-    )
-    return response_text
+    except GeminiAPIError:
+        # При любой ошибке удаляем последний (неудачный) запрос пользователя из кеша,
+        # если этот кеш вообще использовался (т.е. не для Gemma)
+        if history: 
+            history.pop()
+        raise
 
 async def generate_content_simple(api_key: str, prompt: str) -> str:
     """Генерирует ответ от Gemini без истории. Выбрасывает GeminiAPIError."""

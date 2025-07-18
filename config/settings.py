@@ -29,6 +29,63 @@ GENERATION_CONFIG = {
     "max_output_tokens": 8192,
 }
 
+MODELS_METADATA = {
+    # --- Семейство Gemini Flash ---
+    "gemini-1.5-flash": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-1.5-flash-002": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-1.5-flash-8b": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-1.5-flash-8b-001": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-1.5-flash-8b-latest": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-1.5-flash-latest": {"supports_search": False, "supports_system_instruction": True},
+
+    "gemini-2.0-flash": {"supports_search": True, "supports_system_instruction": True},
+    "gemini-2.0-flash-001": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.0-flash-experimental": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.0-flash-lite": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.0-flash-lite-001": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.0-flash-lite-preview": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.0-flash-lite-preview-02-05": {"supports_search": False, "supports_system_instruction": True},
+
+    "gemini-2.5-flash": {"supports_search": True, "supports_system_instruction": True},
+    "gemini-2.5-flash-preview-05-20": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.5-flash-lite-preview-06-17": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.5-flash-preview-05-20": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.5-flash-lite-preview-05-20": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.5-flash-preview-tts": {"supports_search": False, "supports_system_instruction": True}, # TTS - Text-to-Speech, поиск маловероятен
+
+    # --- Семейство Gemini Pro ---
+    "gemini-1.5-pro": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-1.5-pro-002": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-1.5-pro-latest": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-1.0-pro-vision": {"supports_search": False, "supports_system_instruction": True}, # Vision-модели обычно не поддерживают поиск
+
+    "gemini-2.0-pro-experimental": {"supports_search": True, "supports_system_instruction": True},
+    "gemini-2.0-pro-experimental-02-05": {"supports_search": True, "supports_system_instruction": True},
+
+    "gemini-2.5-pro": {"supports_search": True, "supports_system_instruction": True},
+    "gemini-2.5-pro-preview-03-25": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.5-pro-preview-05-06": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.5-pro-preview": {"supports_search": False, "supports_system_instruction": True},
+    "gemini-2.5-pro-preview-tts": {"supports_search": False, "supports_system_instruction": True}, # TTS - Text-to-Speech, поиск маловероятен
+
+    # --- Прочие экспериментальные модели ---
+    "gemini-experimental-1206": {"supports_search": False, "supports_system_instruction": True},
+
+    # --- Семейство Gemma ---
+    "gemma-3-12b-it": {"supports_search": False, "supports_system_instruction": False},
+    "gemma-3-1b-it": {"supports_search": False, "supports_system_instruction": False},
+    "gemma-3-27b-it": {"supports_search": False, "supports_system_instruction": False},
+    "gemma-3-4b-it": {"supports_search": False, "supports_system_instruction": False},
+    "gemma-3n-e2b-it": {"supports_search": False, "supports_system_instruction": False},
+    "gemma-3n-e4b-it": {"supports_search": False, "supports_system_instruction": False},
+    "gemma-2b-it": {"supports_search": False, "supports_system_instruction": False},
+    "gemma-7b-it": {"supports_search": False, "supports_system_instruction": False},
+
+    # --- Семейство LearnLM ---
+    "learnlm-2.0-flash-experimental": {"supports_search": False, "supports_system_instruction": False},
+}
+
+
 SAFETY_SETTINGS = [
     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},

@@ -12,6 +12,7 @@ from telebot import types
 from . import telegram_helpers as tg_helpers
 from utils import markup_helpers as mk
 from utils import localization as loc
+from utils import text_helpers as th
 from config.settings import (
    STATE_WAITING_FOR_TRANSLATE_TEXT, STATE_WAITING_FOR_API_KEY,
     STATE_WAITING_FOR_NEW_DIALOG_NAME, STATE_WAITING_FOR_RENAME_DIALOG,
@@ -302,13 +303,18 @@ async def _handle_state_feedback(message: types.Message, bot: AsyncTeleBot):
 
     if ADMIN_USER_ID:
         try:
+            # Экранируем все пользовательские данные для безопасной вставки в MarkdownV2
+            safe_username = th.escape_markdown(message.from_user.username or 'N/A')
+            safe_first_name = th.escape_markdown(message.from_user.first_name or 'N/A')
+            safe_text = th.escape_markdown(message.text)
+
             admin_notification = loc.get_text('feedback_admin_notification', 'ru').format(
                 user_id=user_id,
-                username=message.from_user.username or 'N/A',
-                first_name=message.from_user.first_name or 'N/A',
-                text=message.text
+                username=safe_username,
+                first_name=safe_first_name,
+                text=safe_text
             )
-            await bot.send_message(ADMIN_USER_ID, admin_notification, parse_mode='Markdown')
+            await bot.send_message(ADMIN_USER_ID, admin_notification, parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Не удалось отправить уведомление о фидбэке администратору: {e}", extra={'user_id': 'System'})
 
@@ -316,45 +322,64 @@ async def _handle_state_feedback(message: types.Message, bot: AsyncTeleBot):
 # --- ОБЩИЙ ОБРАБОТЧИК ДЛЯ СООБЩЕНИЙ БЕЗ СОСТОЯНИЯ ---
 # ===================================================================================
 
+# handlers/message_handlers.py
+
+# ...
+
 async def _handle_no_state_message(message: types.Message, bot: AsyncTeleBot):
     """Обрабатывает текстовые сообщения и фото, когда пользователь не находится ни в каком состоянии."""
     user_id = message.from_user.id
     content_type = message.content_type
     lang_code = await db_manager.get_user_language(user_id)
+    
     try:
-        if content_type == 'text':
-            api_key_exists = await db_manager.get_user_api_key(user_id)
-            if not api_key_exists:
-                await bot.reply_to(message, loc.get_text('api_key_needed_for_chat', lang_code))
-                return
-            await tg_helpers.send_typing_action(bot, user_id)
-            response = await gemini_service.generate_response(user_id, message.text)
-            header = await _create_context_header(user_id, lang_code)
-            await tg_helpers.send_long_message(bot, user_id, f"{header}\n\n{response}")
+        # --- Общая логика для текста и фото ---
+        api_key_exists = await db_manager.get_user_api_key(user_id)
+        if not api_key_exists:
+            # Подбираем правильное сообщение об ошибке
+            error_text_key = 'api_key_needed_for_chat' if content_type == 'text' else 'api_key_needed_for_vision'
+            await bot.reply_to(message, loc.get_text(error_text_key, lang_code))
+            return
 
+        await tg_helpers.send_typing_action(bot, user_id)
+        
+        # Формируем промпт в зависимости от типа контента
+        prompt: Union[str, List[Union[str, PIL.Image.Image]]]
+        if content_type == 'text':
+            prompt = message.text
         elif content_type == 'photo':
-            api_key_exists = await db_manager.get_user_api_key(user_id)
-            if not api_key_exists:
-                await bot.reply_to(message, loc.get_text('api_key_needed_for_vision', lang_code))
-                return
-            await tg_helpers.send_typing_action(bot, user_id)
             file_info = await bot.get_file(message.photo[-1].file_id)
             downloaded_bytes = await bot.download_file(file_info.file_path)
             image = PIL.Image.open(BytesIO(downloaded_bytes))
             prompt_text = message.caption or "Опиши это изображение."
-            prompt: List[Union[str, PIL.Image.Image]] = [prompt_text, image]
-            response = await gemini_service.generate_response(user_id, prompt)
-            header = await _create_context_header(user_id, lang_code)
-            await tg_helpers.send_long_message(bot, user_id, f"{header}\n\n{response}")
+            prompt = [prompt_text, image]
         else:
             await bot.reply_to(message, loc.get_text('unsupported_content', lang_code))
+            return
+            
+        # --- Получаем ответ и источники ---
+        response_text, sources = await gemini_service.generate_response(user_id, prompt)
+        
+        header = await _create_context_header(user_id, lang_code)
+        
+        # --- Формируем финальное сообщение с источниками ---
+        final_message = f"{header}\n\n{response_text}"
+        if sources:
+            sources_text = "\n\n---\n*Источники:*\n"
+            for i, source in enumerate(sources, 1):
+                # Экранируем title для Markdown
+                safe_title = tg_helpers.th.escape_markdown(source['title'])
+                sources_text += f"{i}. [{safe_title}]({source['uri']})\n"
+            final_message += sources_text
+            
+        await tg_helpers.send_long_message(bot, user_id, final_message, disable_web_page_preview=True)
 
     except GeminiAPIError as e:
-        # Получаем модель пользователя, чтобы подставить ее в сообщение об ошибке
         user_model = await db_manager.get_user_gemini_model(user_id) or DEFAULT_MODEL_ID
         user_friendly_error = loc.get_text(e.error_key, lang_code).format(model_name=user_model)
         error_markup = mk.create_error_report_button()
         await tg_helpers.send_long_message(bot, user_id, user_friendly_error, reply_markup=error_markup)
+        
     except Exception as e:
         await tg_helpers.send_error_reply(bot, message, f"Критическая ошибка в _handle_no_state_message: {e}")
         await bot.delete_state(user_id, message.chat.id)
