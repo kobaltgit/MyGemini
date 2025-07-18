@@ -16,7 +16,7 @@ DONATION_URL = os.getenv("DONATION_URL")
 
 # --- Gemini API Settings ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL_NAME = os.getenv("GEMINI_MODEL_NAME", "gemini-1.5-flash-latest")
+DEFAULT_MODEL_ID = os.getenv("DEFAULT_MODEL_ID", "gemini-1.5-flash-latest")
 
 # --- Database Settings ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -182,6 +182,7 @@ STATE_WAITING_FOR_TRANSLATE_TEXT = 'waiting_for_translate_text'
 STATE_WAITING_FOR_HISTORY_DATE = 'waiting_for_history_date'
 STATE_WAITING_FOR_API_KEY = 'waiting_for_api_key'
 STATE_WAITING_FOR_FEEDBACK = 'waiting_for_feedback' # Для репортов об ошибках
+STATE_WAITING_FOR_DRAW_PROMPT = 'waiting_for_draw_prompt'
 # Dialogs
 STATE_WAITING_FOR_NEW_DIALOG_NAME = 'waiting_for_new_dialog_name'
 STATE_WAITING_FOR_RENAME_DIALOG = 'waiting_for_rename_dialog'
@@ -195,4 +196,4 @@ STATE_ADMIN_WAITING_FOR_USER_ID_TO_MESSAGE = 'admin_waiting_for_user_id_message'
 # STATE_ADMIN_WAITING_FOR_MESSAGE_TO_USER = 'admin_waiting_for_message_to_user'
 
 
-print(f"Конфигурация MyGemini/settings.py загружена. Модель Gemini: {GEMINI_MODEL_NAME}")
+print(f"Конфигурация MyGemini/settings.py загружена. Модель Gemini: {DEFAULT_MODEL_ID}")

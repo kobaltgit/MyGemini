@@ -8,7 +8,7 @@ import base64
 import re
 from cachetools import LRUCache
 
-from config.settings import GEMINI_MODEL_NAME, GENERATION_CONFIG, SAFETY_SETTINGS, BOT_PERSONAS, BOT_STYLES
+from config.settings import DEFAULT_MODEL_ID, GENERATION_CONFIG, SAFETY_SETTINGS, BOT_PERSONAS, BOT_STYLES
 from utils import guide_manager
 from logger_config import get_logger
 from database import db_manager
@@ -21,6 +21,11 @@ gemini_logger = get_logger('gemini_api')
 dialog_chats_cache: LRUCache = LRUCache(maxsize=100)
 
 GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+
+# Конфигурация инструмента для поиска Google
+GOOGLE_SEARCH_TOOL = {
+    "tools": [{"google_search": {}}]
+}
 
 
 class GeminiAPIError(Exception):
@@ -185,6 +190,7 @@ Additional context: You are a Telegram bot, and you have built-in features descr
 async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL.Image.Image]]]) -> str:
     """
     Генерирует ответ от Gemini, учитывая активный диалог и персону.
+    Всегда пытается использовать поиск в интернете.
     """
     api_key = await db_manager.get_user_api_key(user_id)
     if not api_key:
@@ -196,9 +202,9 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
         raise GeminiAPIError("Не найден активный диалог. Пожалуйста, перезапустите бота командой /start.", details={})
 
     history = await _get_dialog_chat_history(active_dialog_id)
-    model_name = await db_manager.get_user_gemini_model(user_id) or GEMINI_MODEL_NAME
+    model_name = await db_manager.get_user_gemini_model(user_id) or DEFAULT_MODEL_ID
 
-    gemini_logger.info(f"Генерация ответа для user_id: {user_id}, диалог: {active_dialog_id}, модель: {model_name}", extra={'user_id': str(user_id)})
+    gemini_logger.info(f"Генерация ответа для user_id: {user_id}, диалог: {active_dialog_id}, модель: {model_name}, поиск: True", extra={'user_id': str(user_id)})
 
     request_contents = list(history)
 
@@ -228,10 +234,12 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
 
     url = f"{GEMINI_API_BASE_URL}/models/{model_name}:generateContent"
 
+    # Собираем payload, по умолчанию включая инструмент поиска
     payload = {
         "contents": request_contents,
         "generationConfig": GENERATION_CONFIG,
-        "safetySettings": SAFETY_SETTINGS
+        "safetySettings": SAFETY_SETTINGS,
+        **GOOGLE_SEARCH_TOOL
     }
 
     system_instruction_text = await _get_system_instruction_text(user_id)
@@ -241,40 +249,54 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
     try:
         response_json = await _make_gemini_request_async(api_key, url, payload)
 
-        if not response_json or "candidates" not in response_json:
-            raise GeminiAPIError("Ответ API не содержит 'candidates'.", details=response_json)
-
-        if response_json["candidates"][0].get("finishReason") == "SAFETY":
-             raise GeminiAPIError("Ответ заблокирован настройками безопасности.", details={"finish_reason": "SAFETY"})
-
-        response_text = response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
-
-        history.append({"role": "user", "parts": user_parts})
-        history.append({"role": "model", "parts": [{"text": response_text}]})
-
-        usage_metadata = response_json.get('usageMetadata', {})
-        prompt_tokens = usage_metadata.get('promptTokenCount', 0)
-        completion_tokens = usage_metadata.get('candidatesTokenCount', 0)
-        total_tokens = usage_metadata.get('totalTokenCount', 0)
-
-        await db_manager.store_message(
-            user_id=user_id,
-            dialog_id=active_dialog_id,
-            role='bot',
-            message_text=response_text,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens
-        )
-        return response_text
     except GeminiAPIError as e:
-        if history and request_contents:
-            history.pop() # Удаляем последний (неудачный) запрос пользователя из кэша
-        raise e
+        # Если ошибка связана с тем, что модель не поддерживает поиск,
+        # попробуем сделать запрос еще раз, но уже без инструмента поиска.
+        if e.error_key == "gemini_error_search_not_supported":
+            gemini_logger.warning(f"Модель {model_name} не поддерживает поиск. Повторный запрос без tools.", extra={'user_id': str(user_id)})
+            payload.pop("tools", None) # Удаляем ключ tools
+            try:
+                # Вторая попытка запроса
+                response_json = await _make_gemini_request_async(api_key, url, payload)
+            except GeminiAPIError as final_e:
+                 if history: history.pop() # Удаляем неверный запрос из кеша
+                 raise final_e # Пробрасываем ошибку второй попытки
+        else:
+            # Для всех других ошибок API
+            if history: history.pop() # Удаляем неверный запрос из кеша
+            raise e # Пробрасываем ошибку
+
+    # Обработка успешного ответа (с первой или второй попытки)
+    if not response_json or "candidates" not in response_json:
+        raise GeminiAPIError("Ответ API не содержит 'candidates'.", details=response_json)
+
+    if response_json["candidates"][0].get("finishReason") == "SAFETY":
+         raise GeminiAPIError("Ответ заблокирован настройками безопасности.", details={"finish_reason": "SAFETY"})
+
+    response_text = response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+    history.append({"role": "user", "parts": user_parts})
+    history.append({"role": "model", "parts": [{"text": response_text}]})
+
+    usage_metadata = response_json.get('usageMetadata', {})
+    prompt_tokens = usage_metadata.get('promptTokenCount', 0)
+    completion_tokens = usage_metadata.get('candidatesTokenCount', 0)
+    total_tokens = usage_metadata.get('totalTokenCount', 0)
+
+    await db_manager.store_message(
+        user_id=user_id,
+        dialog_id=active_dialog_id,
+        role='bot',
+        message_text=response_text,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens
+    )
+    return response_text
 
 async def generate_content_simple(api_key: str, prompt: str) -> str:
     """Генерирует ответ от Gemini без истории. Выбрасывает GeminiAPIError."""
-    url = f"{GEMINI_API_BASE_URL}/models/{GEMINI_MODEL_NAME}:generateContent"
+    url = f"{GEMINI_API_BASE_URL}/models/{DEFAULT_MODEL_ID}:generateContent"
     payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
     response_json = await _make_gemini_request_async(api_key, url, payload, 'POST')
     try:
@@ -284,7 +306,7 @@ async def generate_content_simple(api_key: str, prompt: str) -> str:
 
 async def validate_api_key(api_key: str) -> bool:
     """Проверяет валидность API-ключа."""
-    url = f"{GEMINI_API_BASE_URL}/models/{GEMINI_MODEL_NAME}:countTokens"
+    url = f"{GEMINI_API_BASE_URL}/models/{DEFAULT_MODEL_ID}:countTokens"
     payload = {"contents": [{"parts": [{"text": "hello"}]}]}
     try:
         response = await _make_gemini_request_async(api_key, url, payload, 'POST')

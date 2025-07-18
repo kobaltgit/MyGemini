@@ -5,7 +5,7 @@ import datetime
 from typing import List, Tuple, Optional, Dict, Any
 
 from logger_config import get_logger
-from config.settings import DATABASE_NAME
+from config.settings import DATABASE_NAME, DEFAULT_MODEL_ID
 from utils import crypto_helpers
 from handlers import telegram_helpers as tg_helpers
 
@@ -256,10 +256,10 @@ async def add_or_update_user(user_id: int, username: Optional[str], first_name: 
         db_logger.info(f"Добавляем нового пользователя {user_id} (@{username}).")
         today_date_str = datetime.date.today().strftime('%Y-%m-%d')
         query_insert_user = """
-            INSERT INTO users (user_id, username, first_name, last_name, first_interaction_date) 
+            INSERT INTO users (user_id, username, first_name, last_name, first_interaction_date, gemini_model) 
             VALUES (?, ?, ?, ?, ?)
         """
-        params = (user_id, username, first_name, last_name, today_date_str)
+        params = (user_id, username, first_name, last_name, today_date_str, DEFAULT_MODEL_ID)
         await _execute_query(query_insert_user, params, is_write_operation=True)
         # Отправка уведомления администратору
         await tg_helpers.notify_admin_of_new_user(user_id, username, first_name, last_name)

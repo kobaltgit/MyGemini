@@ -13,9 +13,9 @@ from . import telegram_helpers as tg_helpers
 from utils import markup_helpers as mk
 from utils import localization as loc
 from config.settings import (
-    STATE_WAITING_FOR_TRANSLATE_TEXT, STATE_WAITING_FOR_API_KEY,
+   STATE_WAITING_FOR_TRANSLATE_TEXT, STATE_WAITING_FOR_API_KEY,
     STATE_WAITING_FOR_NEW_DIALOG_NAME, STATE_WAITING_FOR_RENAME_DIALOG,
-    STATE_WAITING_FOR_FEEDBACK, GEMINI_MODEL_NAME, BOT_PERSONAS, ADMIN_USER_ID,
+    STATE_WAITING_FOR_FEEDBACK, DEFAULT_MODEL_ID, BOT_PERSONAS, ADMIN_USER_ID,
     STATE_ADMIN_WAITING_FOR_BROADCAST_MSG, STATE_ADMIN_WAITING_FOR_USER_ID_TO_MANAGE,
     STATE_ADMIN_WAITING_FOR_USER_ID_TO_REPLY, STATE_ADMIN_WAITING_FOR_REPLY_MESSAGE
 )
@@ -57,7 +57,7 @@ async def _create_context_header(user_id: int, lang_code: str) -> str:
         return ""
     dialog_name = context_info.get('dialog_name', '..._')
     persona_id = context_info.get('active_persona', 'default')
-    model_name = context_info.get('gemini_model') or GEMINI_MODEL_NAME
+    model_name = context_info.get('gemini_model') or DEFAULT_MODEL_ID
     persona_info = BOT_PERSONAS.get(persona_id, BOT_PERSONAS['default'])
     persona_name = persona_info.get(f"name_{lang_code}", persona_info.get('name_ru', '...'))
     header = (
@@ -350,7 +350,9 @@ async def _handle_no_state_message(message: types.Message, bot: AsyncTeleBot):
             await bot.reply_to(message, loc.get_text('unsupported_content', lang_code))
 
     except GeminiAPIError as e:
-        user_friendly_error = loc.get_text(e.error_key, lang_code)
+        # Получаем модель пользователя, чтобы подставить ее в сообщение об ошибке
+        user_model = await db_manager.get_user_gemini_model(user_id) or DEFAULT_MODEL_ID
+        user_friendly_error = loc.get_text(e.error_key, lang_code).format(model_name=user_model)
         error_markup = mk.create_error_report_button()
         await tg_helpers.send_long_message(bot, user_id, user_friendly_error, reply_markup=error_markup)
     except Exception as e:

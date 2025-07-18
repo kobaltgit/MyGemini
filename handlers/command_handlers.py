@@ -13,7 +13,7 @@ from config.settings import (
     STATE_WAITING_FOR_HISTORY_DATE,
     STATE_WAITING_FOR_API_KEY,
     TOKEN_PRICING,
-    GEMINI_MODEL_NAME,
+    DEFAULT_MODEL_ID,
     STATE_WAITING_FOR_NEW_DIALOG_NAME, 
     STATE_WAITING_FOR_RENAME_DIALOG
 )
@@ -184,7 +184,7 @@ async def handle_usage(message: types.Message, bot: AsyncTeleBot):
     usage_today = await db_manager.get_token_usage_by_period(user_id, 'today')
     usage_month = await db_manager.get_token_usage_by_period(user_id, 'month')
 
-    user_model = await db_manager.get_user_gemini_model(user_id) or GEMINI_MODEL_NAME
+    user_model = await db_manager.get_user_gemini_model(user_id) or DEFAULT_MODEL_ID
     pricing = TOKEN_PRICING.get(user_model, TOKEN_PRICING['default'])
 
     def calculate_cost(usage_data):
