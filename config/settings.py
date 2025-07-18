@@ -26,7 +26,7 @@ DATABASE_NAME = os.path.join(BASE_DIR, 'database', 'bot_database.db')
 GENERATION_CONFIG = {
     "temperature": 0.8,
     "top_p": 1,
-    "max_output_tokens": 8192,
+    "max_output_tokens": 24576,
 }
 
 MODELS_METADATA = {
