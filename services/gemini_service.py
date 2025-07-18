@@ -239,8 +239,8 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
         if first_candidate.get("finishReason") == "SAFETY":
              raise GeminiAPIError("Ответ заблокирован настройками безопасности.", details={"finish_reason": "SAFETY"})
 
-        response_text = first_candidate["content"]["parts"][0]["text"].strip()
-        
+        response_text = "".join(part.get("text", "") for part in first_candidate["content"]["parts"]).strip()  
+              
         # Извлекаем источники из метаданных
         sources = []
         metadata = first_candidate.get('groundingMetadata', {})

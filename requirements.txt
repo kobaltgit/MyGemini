@@ -21,4 +21,6 @@ cachetools>=5.0.0
 # Markdown processing and splitting for Telegram
 chatgpt-md-converter>=0.3.6
 
-git+https://github.com/kobaltgit/telegram_text_splitter.git
+langchain>=0.2.0
+
+# git+https://github.com/kobaltgit/telegram_text_splitter.git

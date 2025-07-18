@@ -371,6 +371,10 @@ async def _handle_no_state_message(message: types.Message, bot: AsyncTeleBot):
                 safe_title = tg_helpers.th.escape_markdown(source['title'])
                 sources_text += f"{i}. [{safe_title}]({source['uri']})\n"
             final_message += sources_text
+
+            # ---> НАЧАЛО ДИАГНОСТИЧЕСКОГО КОДА <---
+        # logger.info(f"Полный текст, ПЕРЕДАВАЕМЫЙ в send_long_message:\n---\n{final_message}\n---", extra={'user_id': str(user_id)})
+        # ---> КОНЕЦ ДИАГНОСТИЧЕСКОГО КОДА <---
             
         await tg_helpers.send_long_message(bot, user_id, final_message, disable_web_page_preview=True)
 

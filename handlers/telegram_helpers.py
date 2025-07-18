@@ -1,26 +1,36 @@
 # File: handlers/telegram_helpers.py
 """
 Модуль со вспомогательными функциями для взаимодействия с Telegram API.
+Использует langchain.text_splitter для надежного разделения сообщений.
 """
 import asyncio
+import re
+import html
 from typing import Optional
+
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 from telebot import apihelper
-from telegram_text_splitter import split_markdown_into_chunks
+
+# НОВЫЙ ИМПОРТ: Используем надежный сплиттер из langchain
+from langchain.text_splitter import MarkdownTextSplitter
 from chatgpt_md_converter import telegram_format
 
 from config.settings import ADMIN_USER_ID
 from logger_config import get_logger
 from utils import text_helpers as th
 from utils import markup_helpers as mk
-from utils import localization as loc # <-- НОВЫЙ ИМПОРТ
-from database import db_manager   # <-- НОВЫЙ ИМПОРТ
+from utils import localization as loc
+from database import db_manager
 
-# Получаем логгер для этого модуля
 logger = get_logger(__name__)
 
 _bot_instance: Optional[AsyncTeleBot] = None
+
+# Инициализируем сплиттер один раз при старте
+# Устанавливаем безопасный лимит, чтобы оставить место для HTML-тегов
+markdown_splitter = MarkdownTextSplitter(chunk_size=3800, chunk_overlap=0)
+
 
 def register_bot_instance(bot: AsyncTeleBot):
     """Регистрирует глобальный экземпляр бота для использования в хелперах."""
@@ -40,45 +50,52 @@ async def send_typing_action(bot: AsyncTeleBot, chat_id: int):
 
 async def send_long_message(bot: AsyncTeleBot, chat_id: int, text: str, **kwargs):
     """
-    Отправляет длинное сообщение, используя telegram_text_splitter для разделения
-    Markdown на корректные фрагменты и chatgpt-md-converter для преобразования в HTML.
+    Отправляет длинное сообщение, используя langchain.MarkdownTextSplitter
+    для корректного разделения на части.
     """
     if not text:
         return
 
-    # Убираем parse_mode из kwargs, так как мы будем управлять им сами (всегда HTML)
     kwargs.pop('parse_mode', None)
 
     try:
-        # 1. Разделяем Markdown на безопасные для Telegram фрагменты
-        markdown_chunks = split_markdown_into_chunks(text)
+        # 1. Используем langchain для разделения Markdown на семантически корректные части
+        markdown_chunks = markdown_splitter.split_text(text)
+        
         total_parts = len(markdown_chunks)
+        if total_parts == 0:
+            return
 
         for i, md_chunk in enumerate(markdown_chunks):
             # 2. Конвертируем каждый фрагмент в HTML, совместимый с Telegram
             html_chunk = telegram_format(md_chunk)
 
+            if not html_chunk or html_chunk.isspace():
+                continue
+
+            current_kwargs = {}
             # Для последней части передаем все оригинальные kwargs (например, reply_markup)
             if i == total_parts - 1:
-                await bot.send_message(chat_id, html_chunk, parse_mode='HTML', **kwargs)
+                current_kwargs = kwargs
             else:
-                # Для промежуточных частей отключаем превью ссылок, чтобы избежать лишнего шума
-                await bot.send_message(chat_id, html_chunk, parse_mode='HTML', disable_web_page_preview=True)
-                await asyncio.sleep(0.5)  # Небольшая задержка между сообщениями
+                current_kwargs['disable_web_page_preview'] = True
+
+            await bot.send_message(chat_id, html_chunk, parse_mode='HTML', **current_kwargs)
+
+            if total_parts > 1:
+                await asyncio.sleep(0.5)
 
     except Exception as e:
-        logger.exception(f"Ошибка при отправке длинного сообщения для user_id {chat_id}. Текст: '{text[:100]}...'", extra={'user_id': str(chat_id)})
-        # В случае сбоя при конвертации/отправке, пробуем отправить текст как есть, без форматирования
+        logger.exception(f"Критическая ошибка при отправке длинного сообщения user_id {chat_id}. Текст: '{text[:100]}...'", extra={'user_id': str(chat_id)})
+        # В случае сбоя пробуем отправить текст как есть, без форматирования
         try:
-            # Используем старый метод простого разделения для plain text
             plain_text = th.remove_markdown(text)
-            # Заменяем несуществующий th.split_message на простой сплит по длине
             max_len = 4096
             parts = [plain_text[i:i+max_len] for i in range(0, len(plain_text), max_len)]
             for part in parts:
                 await bot.send_message(chat_id, part, **kwargs)
         except Exception as fallback_e:
-            logger.error(f"Не удалось отправить сообщение даже в виде простого текста для user_id {chat_id}: {fallback_e}", extra={'user_id': str(chat_id)})
+            logger.error(f"Не удалось отправить сообщение даже в виде простого текста user_id {chat_id}: {fallback_e}", extra={'user_id': str(chat_id)})
 
 
 async def send_error_reply(bot: AsyncTeleBot, message: types.Message, error_log_message: str,
@@ -100,6 +117,7 @@ async def send_error_reply(bot: AsyncTeleBot, message: types.Message, error_log_
             admin_notification = (f"⚠️ *Критическая ошибка у пользователя {user_id}* ⚠️\n\n"
                                   f"```\n{error_log_message}\n```\n\n"
                                   f"Сообщение пользователя: `{message.text or 'Не текстовое сообщение'}`")
+            # Используем рекурсию для отправки длинного сообщения об ошибке
             await send_long_message(bot, ADMIN_USER_ID, admin_notification)
         except apihelper.ApiException as e:
             logger.error(f"Не удалось отправить уведомление об ошибке администратору: {e}", extra={'user_id': 'System'})
@@ -145,7 +163,7 @@ async def edit_message_reply_markup_safe(bot: AsyncTeleBot, chat_id: int, messag
         logger.debug(f"Не удалось отредактировать клавиатуру у сообщения {message_id}: {e}", extra={'user_id': str(chat_id)})
 
 
-# --- НОВАЯ ОБЩАЯ ФУНКЦИЯ ДЛЯ АДМИНКИ ---
+# --- ОБЩАЯ ФУНКЦИЯ ДЛЯ АДМИНКИ ---
 
 async def get_user_info_text(user_id_to_check: int, lang_code: str) -> str:
     """
@@ -174,13 +192,10 @@ async def get_user_info_text(user_id_to_check: int, lang_code: str) -> str:
 
 async def notify_admin_of_new_user(user_id: int, username: Optional[str], first_name: Optional[str], last_name: Optional[str]):
     """Отправляет уведомление администратору о регистрации нового пользователя."""
-    # ВРЕМЕННЫЙ ЛОГ 3
-    logger.info(f"[DEBUG] Вызвана функция notify_admin_of_new_user для {user_id}. ADMIN_ID: {ADMIN_USER_ID}, Bot_Instance_Exists: {bool(_bot_instance)}")
     if not ADMIN_USER_ID or not _bot_instance:
         return
 
     try:
-        # Формируем сообщение
         user_info_parts = [
             f"👤 *Новый пользователь зарегистрирован\\!*",
             f"*ID:* `{user_id}`"
@@ -196,7 +211,6 @@ async def notify_admin_of_new_user(user_id: int, username: Optional[str], first_
 
         text = "\n".join(user_info_parts)
 
-        # Отправляем сообщение админу
         await _bot_instance.send_message(ADMIN_USER_ID, text, parse_mode='MarkdownV2')
         logger.info(f"Администратор уведомлен о новом пользователе {user_id}", extra={'user_id': 'System'})
 
