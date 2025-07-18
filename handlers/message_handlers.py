@@ -353,6 +353,12 @@ async def _handle_no_state_message(message: types.Message, bot: AsyncTeleBot):
             image = PIL.Image.open(BytesIO(downloaded_bytes))
             prompt_text = message.caption or "Опиши это изображение."
             prompt = [prompt_text, image]
+        elif content_type == 'voice':
+             file_info = await bot.get_file(message.voice.file_id)
+             downloaded_bytes = await bot.download_file(file_info.file_path)
+             # Просто передаем байты аудиофайла. Gemini поддерживает ogg-формат из Telegram.
+             prompt_text = "Расшифруй это аудиосообщение и ответь на него."
+             prompt = [prompt_text, downloaded_bytes]
         else:
             await bot.reply_to(message, loc.get_text('unsupported_content', lang_code))
             return
@@ -434,7 +440,7 @@ async def universal_message_router(message: types.Message, bot: AsyncTeleBot):
             await _handle_state_feedback(message, bot)
         else: # state is None
             await _handle_no_state_message(message, bot)
-    elif message.content_type == 'photo':
+    elif message.content_type in ['photo', 'voice']:
         if current_state is None:
             await _handle_no_state_message(message, bot)
         else:

@@ -153,7 +153,7 @@ async def _get_system_instruction_text(user_id: int) -> Optional[str]:
 
     return persona_prompt.strip() if persona_prompt else None
 
-async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL.Image.Image]]]) -> Tuple[str, List[Dict[str, str]]]:
+async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL.Image.Image, bytes]]]) -> Tuple[str, List[Dict[str, str]]]:
     """
     Генерирует ответ от Gemini, динамически включая функции.
     Для моделей Gemma история диалога игнорируется для совместимости.
@@ -186,27 +186,47 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
 
     request_contents = list(history)
     
-    # Формируем тело запроса от пользователя
-    user_message_for_db = ""
+    # Формируем тело запроса от пользователя и сообщение для БД
     user_parts = []
+    user_message_for_db = ""
+
+    # Сценарий 1: Пользователь отправил обычный текст
     if isinstance(prompt, str):
         user_parts.append({"text": prompt})
         user_message_for_db = prompt
+
+    # Сценарий 2: Пользователь отправил медиа (фото или аудио) с возможной подписью
     elif isinstance(prompt, list):
         text_part = ""
+        media_type = None  # 'image' или 'audio'
+
         for item in prompt:
             if isinstance(item, str):
                 text_part = item
             elif isinstance(item, PIL.Image.Image):
+                media_type = "image"
                 buffered = BytesIO()
                 if item.mode == 'RGBA': item = item.convert('RGB')
                 item.save(buffered, format="JPEG")
                 img_str = base64.b64encode(buffered.getvalue()).decode('utf-8')
                 user_parts.append({"inline_data": {"mime_type": "image/jpeg", "data": img_str}})
+            elif isinstance(item, bytes):
+                media_type = "audio"
+                audio_str = base64.b64encode(item).decode('utf-8')
+                user_parts.append({"inline_data": {"mime_type": "audio/ogg", "data": audio_str}})
+
         if text_part:
             user_parts.append({"text": text_part})
-        user_message_for_db = f"[Изображение] {text_part}".strip()
-    
+
+        # Собираем сообщение для сохранения в БД на основе типа медиа
+        if media_type == "image":
+            user_message_for_db = f"[Изображение] {text_part}".strip()
+        elif media_type == "audio":
+            user_message_for_db = f"[Голосовое сообщение] {text_part}".strip()
+        else:
+            user_message_for_db = text_part # На случай, если в списке только текст
+
+    # Добавляем сообщение пользователя в историю запроса и сохраняем в БД
     request_contents.append({"role": "user", "parts": user_parts})
     await db_manager.store_message(user_id, active_dialog_id, 'user', user_message_for_db)
 
