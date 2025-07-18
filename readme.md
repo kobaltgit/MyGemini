@@ -35,6 +35,9 @@
 [
 ![cachetools](https://img.shields.io/badge/cachetools-5.3.3+-brown.svg?style=flat-square)
 ](https://github.com/tkem/cachetools)
+[
+![LangChain](https://img.shields.io/badge/LangChain-0.2.0+-purple.svg?style=flat-square)
+](https://www.langchain.com/)
 
 
 ## Описание проекта
@@ -90,6 +93,8 @@
 *   **sqlite3:** Встроенная база данных SQLite для хранения пользовательских данных и истории сообщений.
 *   **Pillow:** Для обработки изображений перед отправкой в API.
 *   **cachetools:** Для LRU-кэширования истории диалогов и предотвращения утечек памяти.
+*   **langchain:** Для надежного семантического разделения длинных текстов и блоков кода на фрагменты.
+*   **chatgpt-md-converter:** Для конвертации Markdown в HTML-теги, совместимые с Telegram.
 
 ## Настройка и запуск
 

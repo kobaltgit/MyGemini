@@ -35,7 +35,9 @@
 [
 ![cachetools](https://img.shields.io/badge/cachetools-5.3.3+-brown.svg?style=flat-square)
 ](https://github.com/tkem/cachetools)
-
+[
+![LangChain](https://img.shields.io/badge/LangChain-0.2.0+-purple.svg?style=flat-square)
+](https://www.langchain.com/)
 
 
 ## Project Description
@@ -99,6 +101,8 @@ The bot includes a powerful admin panel (`/admin`) for full control over its ope
 *   **sqlite3:** Built-in SQLite database for storing user data and message history.
 *   **Pillow:** For image processing before sending to the API.
 *   **cachetools:** For LRU caching of dialogue history and preventing memory leaks.
+*   **langchain:** For reliable semantic splitting of long texts and code blocks into chunks.
+*   **chatgpt-md-converter:** For converting Markdown to Telegram-compatible HTML tags.
 
 ## Setup and Launch
 
