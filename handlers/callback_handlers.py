@@ -21,6 +21,7 @@ from services import gemini_service
 from services.gemini_service import GeminiAPIError
 from utils import markup_helpers as mk
 from utils import localization as loc
+from utils import text_helpers as th
 from . import telegram_helpers as tg_helpers
 
 from logger_config import get_logger
@@ -90,7 +91,6 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
         elif data.startswith(CALLBACK_CALENDAR_MONTH_PREFIX):
             await handle_calendar_month_navigation(bot, call)
         else:
-            # Пропускаем колбэки для админки, они обрабатываются в admin_handlers
             if not data.startswith('admin_'):
                 await tg_helpers.answer_callback_query(bot, call, text="Unknown action", show_alert=True)
     except GeminiAPIError as e:
@@ -101,23 +101,16 @@ async def handle_callback_query(call: types.CallbackQuery, bot: AsyncTeleBot):
         await tg_helpers.answer_callback_query(bot, call, text="An internal error occurred.", show_alert=True)
 
 
-# --- НОВЫЙ ОБРАБОТЧИК ОБРАТНОЙ СВЯЗИ ---
-
 async def handle_report_error(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """
     Обрабатывает нажатие на кнопку "Сообщить об ошибке".
     """
     user_id = call.from_user.id
-    # Убираем клавиатуру, чтобы избежать повторных нажатий
     await tg_helpers.edit_message_reply_markup_safe(bot, call.message.chat.id, call.message.message_id)
-    # Переводим пользователя в состояние ожидания фидбэка
     await bot.set_state(user_id, STATE_WAITING_FOR_FEEDBACK, call.message.chat.id)
-    # Отправляем инструкцию
     await bot.send_message(user_id, loc.get_text('feedback_prompt', lang_code))
     await tg_helpers.answer_callback_query(bot, call)
 
-
-# --- Обработчики диалогов ---
 
 async def handle_dialogs_menu(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Отображает меню управления диалогами."""
@@ -214,7 +207,6 @@ async def handle_delete_dialog_confirm(bot: AsyncTeleBot, call: types.CallbackQu
 
     await handle_dialogs_menu(bot, call, lang_code)
 
-# --- Обработчики настроек ---
 
 async def handle_back_to_main_settings(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     """Возвращает пользователя в главное меню настроек."""
@@ -320,8 +312,6 @@ async def handle_model_selection(bot: AsyncTeleBot, call: types.CallbackQuery, l
         bot, call, text=loc.get_text('model_changed_notice', lang_code).format(model_name=model_name)
     )
 
-# --- Прочие обработчики ---
-
 async def handle_language_selection_for_translation(bot: AsyncTeleBot, call: types.CallbackQuery, lang_code: str):
     user_id = call.from_user.id
     target_lang_code = call.data[len(CALLBACK_LANG_PREFIX):]
@@ -352,9 +342,10 @@ async def handle_calendar_date_selection(bot: AsyncTeleBot, call: types.Callback
                 if history:
                     history_text = f"📜 {loc.get_text('history_for_date', lang_code)} {selected_date.strftime('%d.%m.%Y')}:\n\n"
                     for item in history:
+                        safe_message = th.escape_markdown(item.get('message_text', ''))
                         role = item.get('role', 'unknown')
                         prefix = f"👤 *{loc.get_text('history_role_user', lang_code)}:*" if role == 'user' else f"🤖 *{loc.get_text('history_role_bot', lang_code)}:*"
-                        history_text += f"{prefix}\n{item.get('message_text', '')}\n\n"
+                        history_text += f"{prefix}\n{safe_message}\n\n"
                     await tg_helpers.send_long_message(bot, user_id, history_text)
                 else:
                     await bot.send_message(user_id, loc.get_text('history_no_messages', lang_code))

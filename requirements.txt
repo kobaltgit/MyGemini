@@ -19,7 +19,7 @@ Pillow>=10.0.0
 cachetools>=5.0.0
 
 # Markdown processing and splitting for Telegram
-chatgpt-md-converter>=0.3.6
+telegramify-markdown>=0.2.1
 
 langchain>=0.2.0
 

@@ -11,6 +11,7 @@ from datetime import datetime
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 from telebot.apihelper import ApiException
+import telegramify_markdown
 
 from config.settings import (
     CALLBACK_ADMIN_MAIN_MENU, CALLBACK_ADMIN_TOGGLE_MAINTENANCE,
@@ -81,7 +82,7 @@ async def handle_reply_command(message: types.Message, bot: AsyncTeleBot):
     target_lang_code = await db_manager.get_user_language(target_user_id)
     notification_text = loc.get_text('admin.reply_admin_notification', target_lang_code).format(text=text_to_send)
     try:
-        await bot.send_message(target_user_id, notification_text, parse_mode='Markdown')
+        await bot.send_message(target_user_id, telegramify_markdown.markdownify(notification_text), parse_mode='MarkdownV2')
         await bot.reply_to(message, loc.get_text('admin.reply_sent_success', lang_code).format(user_id=target_user_id))
         logger.info(f"Администратор {admin_id} отправил ответ пользователю {target_user_id}.")
     except ApiException as e:
@@ -243,9 +244,10 @@ async def _run_broadcast(bot: AsyncTeleBot, admin_id: int, message_text: str, la
     all_user_ids = await db_manager.get_all_user_ids()
     sent_count = 0
     failed_count = 0
+    formatted_message = telegramify_markdown.markdownify(message_text)
     for user_id in all_user_ids:
         try:
-            await bot.send_message(user_id, message_text, disable_web_page_preview=True)
+            await bot.send_message(user_id, formatted_message, parse_mode='MarkdownV2', disable_web_page_preview=True)
             sent_count += 1
         except Exception as e:
             logger.warning(f"Не удалось отправить рассылку пользователю {user_id}: {e}", extra={'user_id': str(user_id)})
@@ -315,7 +317,8 @@ async def handle_stats_menu(call: types.CallbackQuery, bot: AsyncTeleBot):
         chat_id=user_id,
         message_id=call.message.message_id,
         text=stats_text,
-        reply_markup=back_keyboard
+        reply_markup=back_keyboard,
+        parse_mode="MarkdownV2"
     )
     await bot.answer_callback_query(call.id)
 
@@ -367,7 +370,6 @@ async def handle_toggle_block_user(call: types.CallbackQuery, bot: AsyncTeleBot)
         await db_manager.block_user(user_id_to_toggle)
         alert_text = loc.get_text('admin.user_blocked_success', lang_code).format(user_id=user_id_to_toggle)
 
-    # Обновляем карточку пользователя после изменения статуса
     new_user_info_text = await tg_helpers.get_user_info_text(user_id_to_toggle, lang_code)
     new_user_info = await db_manager.get_user_info_for_admin(user_id_to_toggle)
     new_keyboard = mk.create_user_management_keyboard(user_id_to_toggle, new_user_info['is_blocked'], lang_code)
@@ -378,7 +380,7 @@ async def handle_toggle_block_user(call: types.CallbackQuery, bot: AsyncTeleBot)
         message_id=call.message.message_id,
         text=new_user_info_text,
         reply_markup=new_keyboard,
-        parse_mode="Markdown"
+        parse_mode="MarkdownV2"
     )
     await bot.answer_callback_query(call.id, alert_text)
 
@@ -420,7 +422,7 @@ async def handle_export_users(call: types.CallbackQuery, bot: AsyncTeleBot):
             return
 
         output = io.StringIO()
-        output.write('\ufeff') # BOM для корректного открытия в Excel
+        output.write('\ufeff')
         writer = csv.writer(output, delimiter=';', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         headers = ["user_id", "username", "first_name", "last_name", "language_code", "first_interaction_date", "is_blocked"]
         writer.writerow(headers)
@@ -436,13 +438,11 @@ async def handle_export_users(call: types.CallbackQuery, bot: AsyncTeleBot):
         file_data = output.getvalue().encode('utf-8')
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
         file_name = f"users_export_{timestamp}.csv"
-        # ИЗМЕНЕНИЕ 1: Создаем InputFile без имени файла
         input_file = types.InputFile(io.BytesIO(file_data)) 
 
         await bot.send_document(
             admin_id,
             input_file,
-            # ИЗМЕНЕНИЕ 2: Передаем имя файла через параметр visible_file_name
             visible_file_name=file_name,
             caption="✅ Выгрузка данных пользователей завершена."
         )
@@ -461,16 +461,14 @@ async def handle_reply_to_user_start(call: types.CallbackQuery, bot: AsyncTeleBo
     admin_id = call.from_user.id
     lang_code = await db_manager.get_user_language(admin_id)
 
-    # Переводим админа в состояние ожидания User ID
     await bot.set_state(admin_id, STATE_ADMIN_WAITING_FOR_USER_ID_TO_REPLY, admin_id)
     
-    # Редактируем сообщение, запрашивая ID
     await tg_helpers.edit_message_text_safe(
         bot,
         chat_id=admin_id,
         message_id=call.message.message_id,
         text=loc.get_text('admin.reply_prompt_user_id', lang_code),
-        reply_markup=None # Убираем кнопки
+        reply_markup=None
     )
     await bot.answer_callback_query(call.id)
 

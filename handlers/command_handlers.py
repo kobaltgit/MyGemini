@@ -157,11 +157,11 @@ async def handle_personal_account_button(message: types.Message, bot: AsyncTeleB
     user = message.from_user
     user_id = user.id
     await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
-    lang_code = await db_manager.get_user_language(user_id)
     
     await tg_helpers.send_typing_action(bot, user_id)
     info_text = await personal_account.get_personal_account_info(user_id)
     
+    lang_code = await db_manager.get_user_language(user_id)
     main_keyboard = mk.create_main_keyboard(lang_code, user_id)
     await tg_helpers.send_long_message(
         bot, user_id, info_text,
@@ -219,7 +219,7 @@ async def handle_usage(message: types.Message, bot: AsyncTeleBot):
         report_text += f"_{loc.get_text('usage_no_data', lang_code)}_"
 
     report_text += loc.get_text('usage_cost_notice', lang_code)
-    await bot.send_message(user_id, report_text, parse_mode='Markdown')
+    await bot.send_message(user_id, report_text, parse_mode='MarkdownV2')
 
 
 async def handle_full_guide(message: types.Message, bot: AsyncTeleBot):
@@ -232,7 +232,7 @@ async def handle_full_guide(message: types.Message, bot: AsyncTeleBot):
     await tg_helpers.send_typing_action(bot, user_id)
     
     guide_text = guide_manager.get_full_guide(lang_code)
-    await tg_helpers.send_long_message(bot, user_id, guide_text, parse_mode='Markdown')
+    await tg_helpers.send_long_message(bot, user_id, guide_text)
 
 
 async def handle_api_key_info(message: types.Message, bot: AsyncTeleBot):
@@ -245,7 +245,7 @@ async def handle_api_key_info(message: types.Message, bot: AsyncTeleBot):
     await tg_helpers.send_typing_action(bot, user_id)
     
     guide_text = guide_manager.get_guide_section('API_KEY', lang_code)
-    await tg_helpers.send_long_message(bot, user_id, guide_text, parse_mode='Markdown')
+    await tg_helpers.send_long_message(bot, user_id, guide_text)
 
 def register_command_handlers(bot: AsyncTeleBot):
     """Регистрирует все обработчики команд и кнопок-синонимов."""

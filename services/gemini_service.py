@@ -5,6 +5,7 @@ import PIL.Image
 from typing import List, Union, Dict, Optional, Any, Tuple
 from io import BytesIO
 import base64
+import json
 import re
 from cachetools import LRUCache
 
@@ -250,6 +251,14 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
 
     try:
         response_json = await _make_gemini_request_async(api_key, url, payload)
+
+        # --- НОВЫЙ БЛОК ЛОГИРОВАНИЯ ---
+        # Логируем полный, необработанный ответ от API для диагностики.
+        gemini_logger.debug(
+            f"Сырой ответ от Gemini API для user_id {user_id}:\n"
+            f"{json.dumps(response_json, indent=2, ensure_ascii=False)}"
+        )
+        # --- КОНЕЦ БЛОКА ЛОГИРОВАНИЯ ---
 
         if not response_json or "candidates" not in response_json:
             raise GeminiAPIError("Ответ API не содержит 'candidates'.", details=response_json)

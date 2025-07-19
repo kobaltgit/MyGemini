@@ -78,18 +78,18 @@ async def get_personal_account_info(user_id: int) -> str:
         topics_description = await _get_topic_description(user_id, user_api_key, active_dialog_id)
 
     info_text = f"""
-👤 *Личный кабинет / My Account* 👤
+👤 **Личный кабинет / My Account** 👤
 
-🏆 *Звание / Title:* {title}
-💬 *Всего сообщений (все диалоги):* {conversation_count}
-🗓️ *Вы с нами (дней):* {days_active}
+🏆 **Звание / Title:** {title}
+💬 **Всего сообщений (все диалоги):** {conversation_count}
+🗓️ **Вы с нами (дней):** {days_active}
 
---- *Настройки / Settings* ---
-🎭 *Текущая персона / Persona:* {persona_name}
-🌐 *Язык / Language:* {"Русский" if user_lang == 'ru' else "English"}
-🔑 *API Ключ / API Key:* {api_key_status}
+--- **Настройки / Settings** ---
+🎭 **Текущая персона / Persona:** {persona_name}
+🌐 **Язык / Language:** {"Русский" if user_lang == 'ru' else "English"}
+🔑 **API Ключ / API Key:** {api_key_status}
 
---- *Анализ текущего диалога* ---
+--- **Анализ текущего диалога** ---
 🗣️ {topics_description}
 """
     return "\n".join(line.strip() for line in info_text.strip().splitlines())

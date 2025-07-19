@@ -8,6 +8,7 @@ from io import BytesIO
 from typing import List, Union
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
+import telegramify_markdown
 
 from . import telegram_helpers as tg_helpers
 from utils import markup_helpers as mk
@@ -50,8 +51,15 @@ async def _check_access(bot: AsyncTeleBot, user_id: int, lang_code: str) -> bool
     return True
 
 async def _create_context_header(user_id: int, lang_code: str) -> str:
-    """
-    Создает текстовый заголовок с информацией о текущем контексте (диалог, персона, модель).
+    """Формирует текстовый заголовок с информацией о текущем контексте.
+
+    Args:
+        user_id (int): ID пользователя в Telegram.
+        lang_code (str): Код языка пользователя (например, 'ru', 'en') для локализации.
+
+    Returns:
+        str: Отформатированная строка с текущим диалогом, персоной и моделью.
+             Возвращает пустую строку, если не удалось получить информацию о контексте.
     """
     context_info = await db_manager.get_user_context_info(user_id)
     if not context_info:
@@ -113,7 +121,7 @@ async def _handle_state_admin_user_id_manage(message: types.Message, bot: AsyncT
             callback_data='admin_main_menu'
         ))
 
-    await bot.send_message(admin_id, user_info_text, reply_markup=keyboard, parse_mode="Markdown")
+    await bot.send_message(admin_id, user_info_text, reply_markup=keyboard, parse_mode="MarkdownV2")
 
 @admin_required
 async def _handle_state_user_id_for_reply(message: types.Message, bot: AsyncTeleBot):
@@ -170,7 +178,7 @@ async def _handle_state_message_to_user(message: types.Message, bot: AsyncTeleBo
     notification_text = loc.get_text('admin.reply_admin_notification', target_lang_code).format(text=text_to_send)
 
     try:
-        await bot.send_message(target_user_id, notification_text, parse_mode='Markdown')
+        await bot.send_message(target_user_id, telegramify_markdown.markdownify(notification_text), parse_mode='MarkdownV2')
         await bot.send_message(admin_id, loc.get_text('admin.reply_sent_success', lang_code).format(user_id=target_user_id))
         logger.info(f"Администратор {admin_id} отправил сообщение пользователю {target_user_id} через меню.")
     except Exception as e:
@@ -198,12 +206,9 @@ async def _handle_state_api_key(message: types.Message, bot: AsyncTeleBot):
     if is_valid:
         await db_manager.set_user_api_key(user_id, api_key)
 
-        # ---> НАЧАЛО ИСПРАВЛЕНИЯ <---
-        # Сбрасываем кэш текущего диалога, чтобы убрать из него сообщения "установите ключ"
         active_dialog_id = await db_manager.get_active_dialog_id(user_id)
         if active_dialog_id:
             gemini_service.reset_dialog_chat(active_dialog_id)
-        # ---> КОНЕЦ ИСПРАВЛЕНИЯ <---
 
         await bot.delete_state(message.from_user.id, message.chat.id)
         text = loc.get_text('api_key_success', lang_code)
@@ -303,28 +308,23 @@ async def _handle_state_feedback(message: types.Message, bot: AsyncTeleBot):
 
     if ADMIN_USER_ID:
         try:
-            # Экранируем все пользовательские данные для безопасной вставки в MarkdownV2
-            safe_username = th.escape_markdown(message.from_user.username or 'N/A')
-            safe_first_name = th.escape_markdown(message.from_user.first_name or 'N/A')
-            safe_text = th.escape_markdown(message.text)
+            username = message.from_user.username or "N/A"
+            first_name = message.from_user.first_name or "N/A"
+            user_text = message.text
 
             admin_notification = loc.get_text('feedback_admin_notification', 'ru').format(
                 user_id=user_id,
-                username=safe_username,
-                first_name=safe_first_name,
-                text=safe_text
+                username=username,
+                first_name=first_name,
+                text=f"```{user_text}```" # Оборачиваем в блок кода
             )
-            await bot.send_message(ADMIN_USER_ID, admin_notification, parse_mode='MarkdownV2')
+            await bot.send_message(ADMIN_USER_ID, telegramify_markdown.markdownify(admin_notification), parse_mode='MarkdownV2')
         except Exception as e:
             logger.error(f"Не удалось отправить уведомление о фидбэке администратору: {e}", extra={'user_id': 'System'})
 
 # ===================================================================================
 # --- ОБЩИЙ ОБРАБОТЧИК ДЛЯ СООБЩЕНИЙ БЕЗ СОСТОЯНИЯ ---
 # ===================================================================================
-
-# handlers/message_handlers.py
-
-# ...
 
 async def _handle_no_state_message(message: types.Message, bot: AsyncTeleBot):
     """Обрабатывает текстовые сообщения и фото, когда пользователь не находится ни в каком состоянии."""
@@ -336,14 +336,12 @@ async def _handle_no_state_message(message: types.Message, bot: AsyncTeleBot):
         # --- Общая логика для текста и фото ---
         api_key_exists = await db_manager.get_user_api_key(user_id)
         if not api_key_exists:
-            # Подбираем правильное сообщение об ошибке
             error_text_key = 'api_key_needed_for_chat' if content_type == 'text' else 'api_key_needed_for_vision'
             await bot.reply_to(message, loc.get_text(error_text_key, lang_code))
             return
 
         await tg_helpers.send_typing_action(bot, user_id)
         
-        # Формируем промпт в зависимости от типа контента
         prompt: Union[str, List[Union[str, PIL.Image.Image]]]
         if content_type == 'text':
             prompt = message.text
@@ -356,33 +354,32 @@ async def _handle_no_state_message(message: types.Message, bot: AsyncTeleBot):
         elif content_type == 'voice':
              file_info = await bot.get_file(message.voice.file_id)
              downloaded_bytes = await bot.download_file(file_info.file_path)
-             # Просто передаем байты аудиофайла. Gemini поддерживает ogg-формат из Telegram.
              prompt_text = "Расшифруй это аудиосообщение и ответь на него."
              prompt = [prompt_text, downloaded_bytes]
         else:
             await bot.reply_to(message, loc.get_text('unsupported_content', lang_code))
             return
             
-        # --- Получаем ответ и источники ---
         response_text, sources = await gemini_service.generate_response(user_id, prompt)
         
+        # --- ОТПРАВКА ОТВЕТА ---
+        # 1. Отправляем заголовок с контекстом отдельным сообщением
         header = await _create_context_header(user_id, lang_code)
-        
-        # --- Формируем финальное сообщение с источниками ---
-        final_message = f"{header}\n\n{response_text}"
+        if header:
+            await bot.send_message(user_id, telegramify_markdown.markdownify(header), parse_mode='MarkdownV2')
+
+        # 2. Формируем основной текст ответа
+        final_message_body = response_text
         if sources:
             sources_text = "\n\n---\n*Источники:*\n"
             for i, source in enumerate(sources, 1):
-                # Экранируем title для Markdown
-                safe_title = tg_helpers.th.escape_markdown(source['title'])
-                sources_text += f"{i}. [{safe_title}]({source['uri']})\n"
-            final_message += sources_text
+                title = source['title']
+                url = source['uri']
+                sources_text += f"{i}. [{title}]({url})\n"
+            final_message_body += sources_text
 
-            # ---> НАЧАЛО ДИАГНОСТИЧЕСКОГО КОДА <---
-        # logger.info(f"Полный текст, ПЕРЕДАВАЕМЫЙ в send_long_message:\n---\n{final_message}\n---", extra={'user_id': str(user_id)})
-        # ---> КОНЕЦ ДИАГНОСТИЧЕСКОГО КОДА <---
-            
-        await tg_helpers.send_long_message(bot, user_id, final_message, disable_web_page_preview=True)
+        # 3. Отправляем основной текст через функцию для длинных сообщений
+        await tg_helpers.send_long_message(bot, user_id, final_message_body, disable_web_page_preview=True)
 
     except GeminiAPIError as e:
         user_model = await db_manager.get_user_gemini_model(user_id) or DEFAULT_MODEL_ID
@@ -405,20 +402,16 @@ async def universal_message_router(message: types.Message, bot: AsyncTeleBot):
     user = message.from_user
     user_id = user.id
 
-    # Обновляем базовую информацию о пользователе
     user_logger.info(f"Получено сообщение ({message.content_type}) от user ID: {user_id}", extra={'user_id': str(user_id)})
     await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     
-    # Проверка на блокировку и режим обслуживания
     lang_code = await db_manager.get_user_language(user_id)
     if not await _check_access(bot, user_id, lang_code):
         return
 
-    # Получаем текущее состояние пользователя
     current_state = await bot.get_state(user_id, user_id)
     logger.debug(f"Router: User {user_id}, State: {current_state}, Content: {message.content_type}")
 
-    # Явная маршрутизация на основе состояния
     if message.content_type == 'text':
         if current_state == STATE_ADMIN_WAITING_FOR_BROADCAST_MSG:
             await _handle_state_admin_broadcast(message, bot)
@@ -445,11 +438,10 @@ async def universal_message_router(message: types.Message, bot: AsyncTeleBot):
             await _handle_no_state_message(message, bot)
         else:
             await bot.reply_to(message, loc.get_text('state_wrong_content_type', lang_code))
-    else: # другие типы контента
-        # Если пользователь не в состоянии ввода текста, то игнорируем прочий контент
+    else:
         if current_state is None:
              await bot.reply_to(message, loc.get_text('unsupported_content', lang_code))
-        else: # Если в состоянии ожидания текста, а прислал что-то другое
+        else:
              await bot.reply_to(message, loc.get_text('state_wrong_content_type', lang_code))
 
 
@@ -457,7 +449,6 @@ def register_message_handlers(bot: AsyncTeleBot):
     """
     Регистрирует единственный универсальный обработчик для всех сообщений.
     """
-    # Этот обработчик теперь должен ловить все типы контента, которые мы хотим игнорировать или обрабатывать
     bot.register_message_handler(
         universal_message_router,
         content_types=['text', 'photo', 'document', 'audio', 'video', 'sticker', 'voice', 'location', 'contact'],
