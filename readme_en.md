@@ -253,5 +253,5 @@ Logging is configured via the file `config/logging.yaml`. Logs are separated by 
 ## License
 * This project is licensed under the MIT License.
 ## Support and Feedback
-If you have questions, suggestions, or found errors, please create an issue in the GitHub repository or contact me [kobaltmail@gmail.com].
+If you have questions, suggestions, or found errors, please create an issue in the GitHub repository or contact [me](mailto:kobaltmail@gmail.com).
 ## Enjoy using the bot!
