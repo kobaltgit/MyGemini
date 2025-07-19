@@ -38,6 +38,9 @@
 [
 ![LangChain](https://img.shields.io/badge/LangChain-0.2.0+-purple.svg?style=flat-square)
 ](https://www.langchain.com/)
+[
+![Telegramify-Markdown](https://img.shields.io/badge/Telegramify--Markdown-0.2.1+-violet?style=flat-square)
+](https://github.com/sudoskys/telegramify-markdown)
 
 
 ## Описание проекта
@@ -93,8 +96,8 @@
 *   **sqlite3:** Встроенная база данных SQLite для хранения пользовательских данных и истории сообщений.
 *   **Pillow:** Для обработки изображений перед отправкой в API.
 *   **cachetools:** Для LRU-кэширования истории диалогов и предотвращения утечек памяти.
-*   **langchain:** Для надежного семантического разделения длинных текстов и блоков кода на фрагменты.
-*   **chatgpt-md-converter:** Для конвертации Markdown в HTML-теги, совместимые с Telegram.
+*   **LangChain:** Для надежного семантического разделения длинных текстов на фрагменты, сохраняя структуру Markdown.
+*   **telegramify-markdown:** Для корректного преобразования Markdown в формат Telegram MarkdownV2 с экранированием всех спецсимволов.
 
 ## Настройка и запуск
 
