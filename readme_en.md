@@ -53,6 +53,7 @@ The bot is designed with an emphasis on privacy and flexibility. You can conduct
 
 
 ### **[Start using the bot](https://t.me/mgem_bot)**
+<img src="https://i.ibb.co/N62z1kWc/Screenshot-35.png" alt="Screenshot-35" border="0">
 
 
 ## 🚀 Key Features
