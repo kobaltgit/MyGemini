@@ -82,6 +82,13 @@ async def _make_gemini_request_async(api_key: str, url: str, payload: Optional[D
 
                     return response_json # Успешный ответ
 
+        except (asyncio.TimeoutError, aiohttp.ServerTimeoutError):
+            gemini_logger.error(f"Тайм-аут при запросе к Gemini API после {attempt + 1} попыток.", extra={'user_id': 'System'})
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                continue
+            # Если все попытки провалились по таймауту
+            raise GeminiAPIError("Сервер не ответил вовремя.", details={"error": {"message": "service_timeout"}})
         except aiohttp.ClientError as e:
             gemini_logger.exception(f"Сетевая ошибка при запросе к Gemini API: {e}", extra={'user_id': 'System'})
             # Для сетевых ошибок тоже можно попробовать повторить

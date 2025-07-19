@@ -105,6 +105,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'state_wrong_content_type': "Пожалуйста, отправьте текст для завершения текущего действия или нажмите /reset.",
         'translation_error_generic': "Не удалось выполнить перевод. Попробуйте еще раз.",
         # --- Ошибки Gemini API (понятные пользователю) ---
+        'gemini_error_timeout': "⏳ *Сервер не ответил вовремя.*\nЭто может быть связано с большой нагрузкой на API Google или временными проблемами с сетью. Пожалуйста, повторите ваш запрос через несколько минут.",
+        'gemini_error_api_key_invalid': "🚫 *Ошибка: Неверный API-ключ.*\nПожалуйста, проверьте правильность вашего ключа и установите его заново с помощью /set_api_key.",
         'gemini_error_api_key_invalid': "🚫 *Ошибка: Неверный API-ключ.*\nПожалуйста, проверьте правильность вашего ключа и установите его заново с помощью /set_api_key.",
         'gemini_error_permission_denied': "🚫 *Ошибка: Доступ запрещен.*\nУбедитесь, что ваш API-ключ активирован и имеет необходимые разрешения в Google AI Studio.",
         'gemini_error_quota_exceeded': "⏳ *Ошибка: Превышена квота.*\nВы исчерпали лимит запросов к API. Попробуйте позже или проверьте лимиты в вашей учетной записи Google.",
@@ -289,6 +291,8 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
         'state_wrong_content_type': "Please send text to complete the current action, or press /reset.",
         'translation_error_generic': "Failed to perform translation. Please try again.",
         # --- Gemini API Errors (User-Friendly) ---
+        'gemini_error_timeout': "⏳ *Server did not respond in time.*\nThis might be due to a high load on the Google API or temporary network issues. Please try your request again in a few minutes.",
+        'gemini_error_api_key_invalid': "🚫 *Error: Invalid API Key.*\nPlease check your key and set it again using /set_api_key.",
         'gemini_error_api_key_invalid': "🚫 *Error: Invalid API Key.*\nPlease check your key and set it again using /set_api_key.",
         'gemini_error_permission_denied': "🚫 *Error: Permission Denied.*\nEnsure your API key is activated and has permissions in Google AI Studio.",
         'gemini_error_quota_exceeded': "⏳ *Error: Quota Exceeded.*\nYou have exhausted your API request limit. Try again later or check your Google account limits.",

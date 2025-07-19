@@ -11,6 +11,9 @@ ERROR_MAP = {
     # --- Специфичная ошибка для поиска ---
     "tool is not supported for this model": "gemini_error_search_not_supported",
 
+    # --- Ошибка таймаута ---
+    "service_timeout": "gemini_error_timeout",
+
     # --- Общие ошибки ---
     "permission_denied": "gemini_error_permission_denied",
     "PERMISSION_DENIED": "gemini_error_permission_denied",
