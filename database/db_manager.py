@@ -257,7 +257,7 @@ async def add_or_update_user(user_id: int, username: Optional[str], first_name: 
         today_date_str = datetime.date.today().strftime('%Y-%m-%d')
         query_insert_user = """
             INSERT INTO users (user_id, username, first_name, last_name, first_interaction_date, gemini_model) 
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
         """
         params = (user_id, username, first_name, last_name, today_date_str, DEFAULT_MODEL_ID)
         await _execute_query(query_insert_user, params, is_write_operation=True)
