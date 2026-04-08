@@ -21,7 +21,7 @@ gemini_logger = get_logger('gemini_api')
 # maxsize=100 означает, что в памяти будет храниться история 100 последних используемых диалогов.
 dialog_chats_cache: LRUCache = LRUCache(maxsize=100)
 
-GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v1"
+GEMINI_API_BASE_URL = "https://generativelanguage.googleapis.com/v4beta"  # Обновлено с v1beta на v1 для стабильности и совместимости
 
 # Конфигурация инструмента для поиска Google
 GOOGLE_SEARCH_TOOL = {
