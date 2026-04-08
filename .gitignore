@@ -64,3 +64,5 @@ Thumbs.db
 # Environment files - it's better to have them in .env
 # config/logging.yaml
 .env
+cortex-snapshot.json
+CortexDevAnalyzer.exe

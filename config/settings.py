@@ -16,7 +16,7 @@ DONATION_URL = os.getenv("DONATION_URL")
 
 # --- Gemini API Settings ---
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-DEFAULT_MODEL_ID = os.getenv("DEFAULT_MODEL_ID", "gemini-1.5-flash-latest")
+DEFAULT_MODEL_ID = os.getenv("DEFAULT_MODEL_ID", "gemini-2.5-flash")
 
 # --- Database Settings ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
