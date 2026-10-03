@@ -250,7 +250,26 @@ STATE_ADMIN_WAITING_FOR_USER_ID_TO_MANAGE = 'admin_waiting_for_user_id_manage'
 STATE_ADMIN_WAITING_FOR_USER_ID_TO_REPLY = 'admin_waiting_for_user_id_reply'
 STATE_ADMIN_WAITING_FOR_REPLY_MESSAGE = 'admin_waiting_for_reply_message'
 STATE_ADMIN_WAITING_FOR_USER_ID_TO_MESSAGE = 'admin_waiting_for_user_id_message'
-# STATE_ADMIN_WAITING_FOR_MESSAGE_TO_USER = 'admin_waiting_for_message_to_user'
+# --- Modern Settings for v2 (aiogram 3 & google-genai) ---
+DEFAULT_HEADER_STYLE = os.getenv("DEFAULT_HEADER_STYLE", "blockquote")
+DEFAULT_MESSAGE_FORMAT = os.getenv("DEFAULT_MESSAGE_FORMAT", "rich")
+DEFAULT_THINKING_BUDGET = int(os.getenv("DEFAULT_THINKING_BUDGET", "1024"))
+RICH_THROTTLE_INTERVAL = float(os.getenv("RICH_THROTTLE_INTERVAL", "0.8"))
+LEGACY_THROTTLE_INTERVAL = float(os.getenv("LEGACY_THROTTLE_INTERVAL", "1.1"))
+MAX_FORMATTED_CHUNK_SIZE = int(os.getenv("MAX_FORMATTED_CHUNK_SIZE", "3200"))
+CHUNK_SIZE = MAX_FORMATTED_CHUNK_SIZE
+RICH_MESSAGE_CAPACITY = int(os.getenv("RICH_MESSAGE_CAPACITY", "30000"))
+RICH_CHUNK_SIZE = RICH_MESSAGE_CAPACITY
 
+# Реестр проектов автора (Promo Engine)
+PROMO_PROJECTS = {
+    "zero": {
+        "name": "MyGemini Zero",
+        "bot_username": "mgemz_bot",
+        "description_ru": "Zero-Knowledge приватность, RAG-память документов и долговременный контекст.",
+        "description_en": "Zero-Knowledge privacy, RAG document memory & long-term context.",
+        "link": "https://t.me/mgemz_bot",
+    }
+}
 
 print(f"Конфигурация MyGemini/settings.py загружена. Модель Gemini: {DEFAULT_MODEL_ID}")

@@ -23,4 +23,14 @@ telegramify-markdown>=0.2.1
 
 langchain>=0.2.0
 
+# Modern Telegram Core (aiogram 3.x) & Google GenAI SDK
+aiogram>=3.17.0
+google-genai>=1.0.0
+pydantic-settings>=2.0.0
+tg-rich-converter>=0.4.1
+
+# Testing Framework
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+
 # git+https://github.com/kobaltgit/telegram_text_splitter.git

@@ -103,3 +103,40 @@ def escape_markdown(text: str, version: int = 2) -> str:
 
     # Экранируем только символы из списка
     return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", text)
+
+
+def split_text_by_chunks(text: str, max_chars: int = 3500) -> list[str]:
+    """
+    Разбивает длинный текст на удобочитаемые части, не превышающие max_chars.
+    Старается делить по границам абзацев (\\n\\n), строк (\\n) или пробелов.
+    Гарантирует, что ни один чанк не превысит лимит Telegram (4096 символов).
+    """
+    if not text:
+        return []
+    text = text.strip()
+    if not text:
+        return []
+    if len(text) <= max_chars:
+        return [text]
+
+    chunks = []
+    while text:
+        if len(text) <= max_chars:
+            chunks.append(text)
+            break
+
+        # Ищем наилучшую точку разделения в пределах max_chars
+        split_idx = text.rfind("\n\n", 0, max_chars)
+        if split_idx == -1 or split_idx < max_chars // 2:
+            split_idx = text.rfind("\n", 0, max_chars)
+        if split_idx == -1 or split_idx < max_chars // 2:
+            split_idx = text.rfind(" ", 0, max_chars)
+        if split_idx == -1:
+            split_idx = max_chars
+
+        chunk = text[:split_idx].strip()
+        if chunk:
+            chunks.append(chunk)
+        text = text[split_idx:].strip()
+
+    return chunks

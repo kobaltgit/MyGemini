@@ -107,16 +107,22 @@ def handle_shutdown_signal(signum, frame):
         main_logger.warning("Повторный сигнал завершения получен. Процесс уже останавливается.", extra={'user_id': 'System'})
 
 if __name__ == '__main__':
-    main_logger.info(f"Запуск бота (PID: {os.getpid()})...", extra={'user_id': 'System'})
+    main_logger.info(f"Запуск MyGemini (PID: {os.getpid()})...", extra={'user_id': 'System'})
 
     signal.signal(signal.SIGINT, handle_shutdown_signal)
     signal.signal(signal.SIGTERM, handle_shutdown_signal)
 
     import logging
     try:
-        asyncio.run(main())
+        if "--legacy" in sys.argv:
+            main_logger.info("Запуск в режиме Legacy (Telebot)...", extra={'user_id': 'System'})
+            asyncio.run(main())
+        else:
+            main_logger.info("Запуск в современном режиме (aiogram 3.x)...", extra={'user_id': 'System'})
+            from bot_app import start_bot
+            asyncio.run(start_bot())
     except KeyboardInterrupt:
-        main_logger.info("Завершение работы по KeyboardInterrupt (до запуска main loop).", extra={'user_id': 'System'})
+        main_logger.info("Завершение работы по KeyboardInterrupt.", extra={'user_id': 'System'})
     except Exception as e:
         main_logger.exception("Необработанная критическая ошибка на верхнем уровне.", extra={'user_id': 'System'})
         sys.exit(1)

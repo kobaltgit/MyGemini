@@ -66,3 +66,7 @@ Thumbs.db
 .env
 cortex-snapshot.json
 CortexDevAnalyzer.exe
+logs/
+scratch/
+.pytest_cache/
+

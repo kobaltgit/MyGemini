@@ -127,25 +127,35 @@ def setup_database_sync():
                 gemini_model TEXT DEFAULT NULL,
                 active_persona TEXT DEFAULT 'default' NOT NULL,
                 active_dialog_id INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL,
-                is_blocked INTEGER NOT NULL DEFAULT 0
+                is_blocked INTEGER NOT NULL DEFAULT 0,
+                thinking_budget INTEGER NOT NULL DEFAULT 1024,
+                enable_code_execution INTEGER NOT NULL DEFAULT 0,
+                enable_google_search INTEGER NOT NULL DEFAULT 0,
+                header_style TEXT NOT NULL DEFAULT 'blockquote',
+                message_format TEXT NOT NULL DEFAULT 'rich'
             )""")
         else:
             # Обновлено: добавляем новые поля для миграции
             required_user_columns = {
-                'active_dialog_id', 'active_persona', 'is_blocked',
-                'username', 'first_name', 'last_name'
+                'active_dialog_id': "INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL",
+                'active_persona': "TEXT DEFAULT 'default' NOT NULL",
+                'is_blocked': "INTEGER NOT NULL DEFAULT 0",
+                'username': "TEXT",
+                'first_name': "TEXT",
+                'last_name': "TEXT",
+                'thinking_budget': "INTEGER NOT NULL DEFAULT 1024",
+                'enable_code_execution': "INTEGER NOT NULL DEFAULT 0",
+                'enable_google_search': "INTEGER NOT NULL DEFAULT 0",
+                'header_style': "TEXT NOT NULL DEFAULT 'blockquote'",
+                'message_format': "TEXT NOT NULL DEFAULT 'rich'",
+                'subscription_status': "TEXT DEFAULT 'inactive' NOT NULL",
+                'subscription_end_date': "TEXT DEFAULT NULL",
             }
-            missing_user_columns = required_user_columns - user_columns
+            missing_user_columns = set(required_user_columns.keys()) - user_columns
             for col in missing_user_columns:
-                db_logger.info(f"Добавляем отсутствующий столбец '{col}' в 'users'...")
-                if col == 'active_persona':
-                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT DEFAULT 'default' NOT NULL")
-                elif col == 'is_blocked':
-                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0")
-                elif col in ['username', 'first_name', 'last_name']:
-                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT") # Могут быть NULL
-                else: # active_dialog_id
-                    cursor.execute(f"ALTER TABLE users ADD COLUMN {col} INTEGER REFERENCES dialogs(dialog_id) ON DELETE SET NULL")
+                col_def = required_user_columns[col]
+                db_logger.info(f"Добавляем отсутствующий столбец '{col}' ({col_def}) в 'users'...")
+                cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {col_def}")
 
         # --- Таблица dialogs ---
         cursor.execute("PRAGMA table_info(dialogs)")
@@ -184,6 +194,23 @@ def setup_database_sync():
         elif 'dialog_id' not in conversation_columns:
             db_logger.info("Добавляем отсутствующий столбец 'dialog_id' в 'conversations'...")
             cursor.execute("ALTER TABLE conversations ADD COLUMN dialog_id INTEGER REFERENCES dialogs(dialog_id) ON DELETE CASCADE")
+
+        # --- Таблица subscription_payments ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS subscription_payments (
+                payment_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                plan_id TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                currency TEXT NOT NULL DEFAULT 'RUB',
+                payment_date TEXT NOT NULL,
+                subscription_end_date TEXT NOT NULL,
+                telegram_charge_id TEXT,
+                provider_charge_id TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_payments_user ON subscription_payments (user_id)")
 
         conn.commit()
 
@@ -390,7 +417,7 @@ async def get_conversation_history_by_date(dialog_id: int, history_date: datetim
     """Получает историю сообщений для конкретного диалога за определенную дату."""
     start_dt = datetime.datetime.combine(history_date, datetime.time.min, tzinfo=datetime.timezone.utc)
     end_dt = datetime.datetime.combine(history_date, datetime.time.max, tzinfo=datetime.timezone.utc)
-    query = "SELECT role, message_text FROM conversations WHERE dialog_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp ASC"
+    query = "SELECT role, message_text, timestamp FROM conversations WHERE dialog_id = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp ASC"
     rows = await _execute_query(query, (dialog_id, start_dt.isoformat(), end_dt.isoformat()), fetch_all=True)
     return [dict(row) for row in rows] if rows else []
 
@@ -589,20 +616,380 @@ async def get_user_info_for_admin(user_id: int) -> Optional[Dict[str, Any]]:
     return None
 
 
-# --- НОВАЯ ФУНКЦИЯ ДЛЯ ЭКСПОРТА ---
+async def get_users_with_key_count() -> int:
+    """Возвращает количество пользователей с установленным API-ключом."""
+    count = await _execute_query("SELECT COUNT(*) FROM users WHERE api_key IS NOT NULL AND api_key != ''")
+    return count if count is not None else 0
+
+
+async def get_user_message_count(user_id: int) -> int:
+    """Возвращает количество сообщений конкретного пользователя."""
+    count = await _execute_query("SELECT COUNT(*) FROM conversations WHERE user_id = ?", (user_id,))
+    return count if count is not None else 0
+
+
+async def get_all_users_with_stats() -> List[Dict[str, Any]]:
+    """Возвращает список всех пользователей с агрегированной статистикой."""
+    query = """
+        SELECT
+            u.user_id,
+            u.username,
+            u.first_name,
+            u.last_name,
+            u.language_code,
+            u.first_interaction_date,
+            u.is_blocked,
+            (u.api_key IS NOT NULL AND u.api_key != '') as has_api_key,
+            u.gemini_model,
+            u.bot_style,
+            u.active_persona,
+            (SELECT COUNT(*) FROM conversations WHERE user_id = u.user_id) as message_count
+        FROM users u
+        ORDER BY u.user_id DESC
+    """
+    rows = await _execute_query(query, fetch_all=True)
+    return [dict(r) for r in rows] if rows else []
+
+
+# --- ФУНКЦИЯ ДЛЯ ЭКСПОРТА ---
 async def get_all_users_for_export() -> List[Dict[str, Any]]:
     """Извлекает всех пользователей со всеми необходимыми полями для экспорта в CSV."""
     query = """
         SELECT
-            user_id,
-            username,
-            first_name,
-            last_name,
-            language_code,
-            first_interaction_date,
-            is_blocked
-        FROM users
-        ORDER BY user_id ASC
+            u.user_id,
+            u.username,
+            u.first_name,
+            u.last_name,
+            u.language_code,
+            u.first_interaction_date,
+            u.is_blocked,
+            (u.api_key IS NOT NULL AND u.api_key != '') as has_api_key,
+            u.bot_style,
+            u.gemini_model,
+            u.active_persona,
+            (SELECT COUNT(*) FROM conversations WHERE user_id = u.user_id) as message_count
+        FROM users u
+        ORDER BY u.user_id ASC
     """
     rows = await _execute_query(query, fetch_all=True)
     return [dict(row) for row in rows] if rows else []
+
+
+# ===================================================================================
+# --- НОВЫЕ МЕТОДЫ ДЛЯ MyGemini v2 (aiogram 3.x) ---
+# ===================================================================================
+
+async def get_user_settings(user_id: int) -> Optional[Dict[str, Any]]:
+    """Возвращает все настройки пользователя."""
+    query = """
+        SELECT user_id, username, first_name, last_name, bot_style,
+               first_interaction_date, api_key, language_code, gemini_model,
+               active_persona, active_dialog_id, is_blocked, thinking_budget,
+               enable_code_execution, enable_google_search, header_style, message_format
+        FROM users WHERE user_id = ?
+    """
+    row = await _execute_query(query, (user_id,), fetch_one=True)
+    return dict(row) if row else None
+
+
+async def set_user_header_style(user_id: int, header_style: str):
+    """Обновляет стиль шапки ответа (blockquote, expandable, hidden)."""
+    query = "UPDATE users SET header_style = ? WHERE user_id = ?"
+    await _execute_query(query, (header_style, user_id), is_write_operation=True)
+
+
+async def get_user_header_style(user_id: int) -> str:
+    """Возвращает стиль шапки ответа пользователя."""
+    query = "SELECT header_style FROM users WHERE user_id = ?"
+    row = await _execute_query(query, (user_id,), fetch_one=True)
+    if row and row['header_style']:
+        return row['header_style']
+    return 'blockquote'
+
+
+async def set_user_message_format(user_id: int, message_format: str):
+    """Обновляет формат сообщений (rich, classic)."""
+    query = "UPDATE users SET message_format = ? WHERE user_id = ?"
+    await _execute_query(query, (message_format, user_id), is_write_operation=True)
+
+
+async def get_user_message_format(user_id: int) -> str:
+    """Возвращает формат сообщений пользователя."""
+    query = "SELECT message_format FROM users WHERE user_id = ?"
+    row = await _execute_query(query, (user_id,), fetch_one=True)
+    if row and row['message_format']:
+        return row['message_format']
+    return 'rich'
+
+
+async def set_user_thinking_budget(user_id: int, budget: int):
+    """Обновляет бюджет размышлений модели (0, 1024, 4096)."""
+    query = "UPDATE users SET thinking_budget = ? WHERE user_id = ?"
+    await _execute_query(query, (budget, user_id), is_write_operation=True)
+
+
+async def get_user_thinking_budget(user_id: int) -> int:
+    """Возвращает бюджет размышлений пользователя."""
+    query = "SELECT thinking_budget FROM users WHERE user_id = ?"
+    row = await _execute_query(query, (user_id,), fetch_one=True)
+    if row and row['thinking_budget'] is not None:
+        return int(row['thinking_budget'])
+    return 1024
+
+
+async def toggle_user_code_execution(user_id: int) -> bool:
+    """Переключает статус песочницы Python и возвращает новое значение."""
+    query_select = "SELECT enable_code_execution FROM users WHERE user_id = ?"
+    row = await _execute_query(query_select, (user_id,), fetch_one=True)
+    current_val = bool(row['enable_code_execution']) if row and row['enable_code_execution'] is not None else False
+    new_val = not current_val
+    query_update = "UPDATE users SET enable_code_execution = ? WHERE user_id = ?"
+    await _execute_query(query_update, (1 if new_val else 0, user_id), is_write_operation=True)
+    return new_val
+
+
+async def get_user_code_execution(user_id: int) -> bool:
+    """Возвращает флаг активности песочницы Python."""
+    query = "SELECT enable_code_execution FROM users WHERE user_id = ?"
+    row = await _execute_query(query, (user_id,), fetch_one=True)
+    return bool(row['enable_code_execution']) if row and row['enable_code_execution'] is not None else False
+
+
+async def toggle_user_google_search(user_id: int) -> bool:
+    """Переключает статус Google Search и возвращает новое значение."""
+    query_select = "SELECT enable_google_search FROM users WHERE user_id = ?"
+    row = await _execute_query(query_select, (user_id,), fetch_one=True)
+    current_val = bool(row['enable_google_search']) if row and row['enable_google_search'] is not None else False
+    new_val = not current_val
+    query_update = "UPDATE users SET enable_google_search = ? WHERE user_id = ?"
+    await _execute_query(query_update, (1 if new_val else 0, user_id), is_write_operation=True)
+    return new_val
+
+
+async def get_user_google_search(user_id: int) -> bool:
+    """Возвращает флаг активности Google Search."""
+    query = "SELECT enable_google_search FROM users WHERE user_id = ?"
+    row = await _execute_query(query, (user_id,), fetch_one=True)
+    return bool(row['enable_google_search']) if row and row['enable_google_search'] is not None else False
+
+
+async def clear_dialog_history(dialog_id: int):
+    """Удаляет все сообщения из диалога, сохраняя сам диалог."""
+    query = "DELETE FROM conversations WHERE dialog_id = ?"
+    await _execute_query(query, (dialog_id,), is_write_operation=True)
+    db_logger.info(f"Очищена история диалога ID {dialog_id}")
+
+
+async def delete_last_assistant_message(dialog_id: int) -> Optional[int]:
+    """Удаляет последнее сообщение ассистента из диалога (для кнопки [🔄 Еще раз])."""
+    query_find = """
+        SELECT conversation_id FROM conversations
+        WHERE dialog_id = ? AND role = 'bot'
+        ORDER BY conversation_id DESC LIMIT 1
+    """
+    row = await _execute_query(query_find, (dialog_id,), fetch_one=True)
+    if not row:
+        return None
+    conv_id = row['conversation_id']
+    query_del = "DELETE FROM conversations WHERE conversation_id = ?"
+    await _execute_query(query_del, (conv_id,), is_write_operation=True)
+    return conv_id
+
+
+async def delete_last_conversation_turn(dialog_id: int) -> bool:
+    """Удаляет последний диалоговый шаг (сообщение бота и предшествующее сообщение пользователя) (для [↩️ Откатить шаг])."""
+    query_last_bot = """
+        SELECT conversation_id FROM conversations
+        WHERE dialog_id = ? AND role = 'bot'
+        ORDER BY conversation_id DESC LIMIT 1
+    """
+    bot_row = await _execute_query(query_last_bot, (dialog_id,), fetch_one=True)
+    if not bot_row:
+        return False
+    bot_conv_id = bot_row['conversation_id']
+
+    query_last_user = """
+        SELECT conversation_id FROM conversations
+        WHERE dialog_id = ? AND role = 'user' AND conversation_id < ?
+        ORDER BY conversation_id DESC LIMIT 1
+    """
+    user_row = await _execute_query(query_last_user, (dialog_id, bot_conv_id), fetch_one=True)
+
+    ids_to_delete = [bot_conv_id]
+    if user_row:
+        ids_to_delete.append(user_row['conversation_id'])
+
+    for cid in ids_to_delete:
+        await _execute_query("DELETE FROM conversations WHERE conversation_id = ?", (cid,), is_write_operation=True)
+    return True
+
+
+async def get_dialog_all_messages(dialog_id: int) -> List[Dict[str, Any]]:
+    """Извлекает всю историю сообщений диалога по возрастанию времени (для экспорта в .md)."""
+    query = """
+        SELECT role, message_text, timestamp, prompt_tokens, completion_tokens, total_tokens
+        FROM conversations
+        WHERE dialog_id = ?
+        ORDER BY conversation_id ASC
+    """
+    rows = await _execute_query(query, (dialog_id,), fetch_all=True)
+    return [dict(r) for r in rows] if rows else []
+
+
+async def get_dialog_info(dialog_id: int) -> Optional[Dict[str, Any]]:
+    """Возвращает информацию о диалоге по ID."""
+    query = "SELECT dialog_id, user_id, name, created_at FROM dialogs WHERE dialog_id = ?"
+    row = await _execute_query(query, (dialog_id,), fetch_one=True)
+    return dict(row) if row else None
+
+
+# ===================================================================================
+# --- АДМИН-ПАНЕЛЬ: УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ И ПОДПИСКАМИ ---
+# ===================================================================================
+
+async def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
+    """Возвращает полную карточку пользователя по ID."""
+    query = """
+        SELECT user_id, username, first_name, last_name, bot_style,
+               first_interaction_date, api_key, language_code, gemini_model,
+               active_persona, active_dialog_id, is_blocked, thinking_budget,
+               enable_code_execution, enable_google_search, header_style, message_format,
+               subscription_status, subscription_end_date
+        FROM users WHERE user_id = ?
+    """
+    row = await _execute_query(query, (user_id,), fetch_one=True)
+    return dict(row) if row else None
+
+
+async def get_all_users() -> List[Dict[str, Any]]:
+    """Возвращает список всех зарегистрированных пользователей."""
+    query = """
+        SELECT user_id, username, first_name, last_name, bot_style,
+               first_interaction_date, api_key, language_code, gemini_model,
+               active_persona, is_blocked, subscription_status, subscription_end_date
+        FROM users ORDER BY user_id ASC
+    """
+    rows = await _execute_query(query, fetch_all=True)
+    return [dict(r) for r in rows] if rows else []
+
+
+async def set_user_blocked(user_id: int, is_blocked: bool):
+    """Блокирует или разблокирует пользователя."""
+    query = "UPDATE users SET is_blocked = ? WHERE user_id = ?"
+    await _execute_query(query, (1 if is_blocked else 0, user_id), is_write_operation=True)
+    db_logger.info(f"Статус блокировки пользователя {user_id} изменен на {is_blocked}")
+
+
+async def reset_user_api_key(user_id: int):
+    """Сбрасывает сохраненный API-ключ пользователя."""
+    query = "UPDATE users SET api_key = NULL WHERE user_id = ?"
+    await _execute_query(query, (user_id,), is_write_operation=True)
+    db_logger.info(f"API-ключ пользователя {user_id} сброшен администратором")
+
+
+async def update_user_subscription(user_id: int, status: str, end_date: str):
+    """Обновляет статус и дату окончания подписки пользователя."""
+    query = "UPDATE users SET subscription_status = ?, subscription_end_date = ? WHERE user_id = ?"
+    await _execute_query(query, (status, end_date, user_id), is_write_operation=True)
+    db_logger.info(f"Подписка пользователя {user_id} обновлена: статус={status}, до={end_date}")
+
+
+async def record_payment(
+    user_id: int,
+    plan_id: str,
+    amount: int,
+    currency: str = "RUB",
+    payment_date: Optional[str] = None,
+    subscription_end_date: Optional[str] = None,
+    telegram_charge_id: Optional[str] = None,
+    provider_charge_id: Optional[str] = None,
+) -> int:
+    """Записывает транзакцию оплаты подписки."""
+    now_str = payment_date or datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    end_str = subscription_end_date or ""
+    query = """
+        INSERT INTO subscription_payments (
+            user_id, plan_id, amount, currency, payment_date,
+            subscription_end_date, telegram_charge_id, provider_charge_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    params = (user_id, plan_id, amount, currency, now_str, end_str, telegram_charge_id, provider_charge_id)
+    payment_id = await _execute_query(query, params, is_write_operation=True)
+    db_logger.info(f"Записан платеж {amount} {currency} для пользователя {user_id}")
+    return payment_id
+
+
+async def get_user_payments(user_id: int) -> List[Dict[str, Any]]:
+    """Возвращает историю платежей конкретного пользователя."""
+    query = """
+        SELECT payment_id, user_id, plan_id, amount, currency, payment_date, subscription_end_date
+        FROM subscription_payments
+        WHERE user_id = ?
+        ORDER BY payment_id DESC
+    """
+    rows = await _execute_query(query, (user_id,), fetch_all=True)
+    return [dict(r) for r in rows] if rows else []
+
+
+async def get_all_payments() -> List[Dict[str, Any]]:
+    """Возвращает все платежи в обратном хронологическом порядке."""
+    query = """
+        SELECT payment_id, user_id, plan_id, amount, currency, payment_date, subscription_end_date
+        FROM subscription_payments
+        ORDER BY payment_id DESC
+    """
+    rows = await _execute_query(query, fetch_all=True)
+    return [dict(r) for r in rows] if rows else []
+
+
+async def get_all_subscribers() -> List[Dict[str, Any]]:
+    """Возвращает список всех подписчиков (активных или когда-либо оформлявших)."""
+    from config.settings import ADMIN_USER_ID
+    query = """
+        SELECT user_id, username, first_name, last_name, language_code,
+               first_interaction_date, subscription_status, subscription_end_date, is_blocked
+        FROM users
+        WHERE subscription_status = 'active'
+           OR subscription_end_date IS NOT NULL
+           OR user_id = ?
+        ORDER BY user_id ASC
+    """
+    rows = await _execute_query(query, (ADMIN_USER_ID or 0,), fetch_all=True)
+    return [dict(r) for r in rows] if rows else []
+
+
+async def get_payment_stats() -> Dict[str, Any]:
+    """Агрегирует статистику по платежам и подписчикам."""
+    count_row = await _execute_query("SELECT COUNT(*) as c FROM subscription_payments", fetch_one=True)
+    sum_row = await _execute_query("SELECT SUM(amount) as s FROM subscription_payments", fetch_one=True)
+    unique_row = await _execute_query("SELECT COUNT(DISTINCT user_id) as u FROM subscription_payments", fetch_one=True)
+
+    total_payments = count_row['c'] if count_row else 0
+    total_revenue = sum_row['s'] if sum_row and sum_row['s'] is not None else 0
+    unique_paying_users = unique_row['u'] if unique_row else 0
+
+    return {
+        "total_payments": total_payments,
+        "total_revenue": total_revenue,
+        "unique_paying_users": unique_paying_users,
+    }
+
+
+def is_subscription_active(user_dict: Dict[str, Any]) -> bool:
+    """Проверяет, активна ли подписка пользователя (вечная для ADMIN_USER_ID)."""
+    from config.settings import ADMIN_USER_ID
+    uid = user_dict.get("user_id")
+    if ADMIN_USER_ID and uid == ADMIN_USER_ID:
+        return True
+
+    status = user_dict.get("subscription_status")
+    end_date_str = user_dict.get("subscription_end_date")
+    if status == "active":
+        if not end_date_str:
+            return True
+        try:
+            end_date = datetime.datetime.strptime(end_date_str[:10], "%Y-%m-%d").date()
+            return end_date >= datetime.date.today()
+        except Exception:
+            return True
+    return False

@@ -6,7 +6,9 @@
 """
 import asyncio
 import re
-from typing import Optional
+import html
+import datetime
+from typing import Optional, Any
 
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
@@ -25,18 +27,12 @@ from database import db_manager
 
 logger = get_logger(__name__)
 
-_bot_instance: Optional[AsyncTeleBot] = None
+_bot_instance: Any = None
 
 
-def register_bot_instance(bot: AsyncTeleBot):
+def register_bot_instance(bot: Any):
     """
-    Регистрирует глобальный экземпляр бота для использования в хелперах.
-
-    Это позволяет вызывать функции, отправляющие сообщения (например, уведомления
-    администратору), из модулей, где экземпляр бота напрямую недоступен.
-
-    Args:
-        bot: Экземпляр AsyncTeleBot для регистрации.
+    Регистрирует глобальный экземпляр бота (aiogram Bot или Telebot) для использования в хелперах.
     """
     global _bot_instance
     _bot_instance = bot
@@ -314,17 +310,32 @@ async def get_user_info_text(user_id_to_check: int, lang_code: str) -> str:
 async def notify_admin_of_new_user(user_id: int, username: Optional[str], first_name: Optional[str], last_name: Optional[str]):
     """
     Отправляет уведомление администратору о регистрации нового пользователя.
-
-    Args:
-        user_id: ID нового пользователя.
-        username: Username нового пользователя.
-        first_name: Имя нового пользователя.
-        last_name: Фамилия нового пользователя.
+    Поддерживает как aiogram Bot (HTML), так и Telebot (MarkdownV2).
     """
     if not ADMIN_USER_ID or not _bot_instance:
+        logger.warning(f"notify_admin_of_new_user пропущен: ADMIN_USER_ID={ADMIN_USER_ID}, bot={bool(_bot_instance)}")
         return
 
     try:
+        # Check if _bot_instance is aiogram Bot
+        if hasattr(_bot_instance, "token") and hasattr(_bot_instance, "session"):
+            uname = f"@{username}" if username else "нет"
+            fname = html.escape(first_name or "—")
+            lname = html.escape(last_name or "—")
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            text = (
+                f"👤 <b>Новый пользователь зарегистрирован!</b>\n\n"
+                f"<b>ID:</b> <code>{user_id}</code>\n"
+                f"<b>Username:</b> {uname}\n"
+                f"<b>Имя:</b> {fname}\n"
+                f"<b>Фамилия:</b> {lname}\n"
+                f"<b>Дата:</b> {now_str}"
+            )
+            await _bot_instance.send_message(ADMIN_USER_ID, text, parse_mode="HTML")
+            logger.info(f"Администратор уведомлен о новом пользователе {user_id} (aiogram)", extra={'user_id': 'System'})
+            return
+
+        # Legacy Telebot fallback
         user_info_parts = [
             f"👤 *Новый пользователь зарегистрирован\\!*",
             f"*ID:* `{user_id}`"
@@ -339,10 +350,8 @@ async def notify_admin_of_new_user(user_id: int, username: Optional[str], first_
             user_info_parts.append(f"*Фамилия:* `{safe_last_name}`")
 
         text = "\n".join(user_info_parts)
-
-        # Убедимся, что parse_mode явно указан
         await _bot_instance.send_message(ADMIN_USER_ID, text, parse_mode='MarkdownV2')
-        logger.info(f"Администратор уведомлен о новом пользователе {user_id}", extra={'user_id': 'System'})
+        logger.info(f"Администратор уведомлен о новом пользователе {user_id} (telebot)", extra={'user_id': 'System'})
 
     except Exception as e:
         logger.error(f"Не удалось отправить уведомление администратору о новом пользователе {user_id}: {e}", extra={'user_id': 'System'})

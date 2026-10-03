@@ -29,8 +29,298 @@ GOOGLE_SEARCH_TOOL = {
 }
 
 
+from google import genai
+from google.genai import types
+from google.genai.errors import APIError
+
+# Кэш для моделей, не поддерживающих поиск
+KNOWN_NO_SEARCH_MODELS: set = set()
+
+
+def model_supports_search(model_name: str) -> bool:
+    """Определяет, поддерживает ли модель инструмент Google Search."""
+    if not model_name:
+        return False
+    clean_name = model_name.lower().replace("models/", "").strip()
+    if clean_name in KNOWN_NO_SEARCH_MODELS:
+        return False
+    if clean_name.startswith("gemma"):
+        return False
+    no_search_patterns = [
+        "-image", "-tts", "-transcribe", "embedding", "aqa", "veo", "lyria",
+        "computer-use", "robotics", "-lite"
+    ]
+    if any(p in clean_name for p in no_search_patterns):
+        return False
+    if clean_name in MODELS_METADATA:
+        return MODELS_METADATA[clean_name].get("supports_search", True)
+    return clean_name.startswith("gemini-")
+
+
+class GeminiAPIException(Exception):
+    """Базовое исключение для ошибок Gemini API нового SDK."""
+    def __init__(self, message: str, status_code: Optional[int] = None, details: Optional[Dict] = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.details = details or {}
+
+
+class GeminiQuotaExceededException(GeminiAPIException):
+    """Исключение при ошибке 429 / исчерпании квот."""
+    pass
+
+
+class StreamChunk(str):
+    """Подкласс строки с сохранением usage_metadata токенов."""
+    usage_metadata: Optional[Any] = None
+
+
+class GeminiService:
+    """Сервис для работы с официальным google-genai SDK."""
+
+    def __init__(self, api_key: str):
+        if not api_key:
+            raise ValueError("API key must not be empty.")
+        self.api_key = api_key
+        self.client = genai.Client(api_key=api_key)
+        self.last_usage_metadata: Optional[Dict[str, int]] = None
+        self.fallback_model: Optional[str] = None
+
+    async def get_available_models(self) -> List[Dict[str, Any]]:
+        """Запрашивает список доступных моделей с бейджами поиска."""
+        try:
+            def _fetch_models():
+                return list(self.client.models.list())
+
+            raw_models = await asyncio.to_thread(_fetch_models)
+            parsed_models = []
+            for m in raw_models:
+                name = m.name or ""
+                clean_id = name.replace("models/", "")
+                display_name = m.display_name or clean_id
+                supported_actions = getattr(m, "supported_generation_methods", []) or []
+                if supported_actions and "generateContent" not in supported_actions:
+                    continue
+                if any(x in clean_id for x in ["embedding", "aqa", "imagen", "veo"]):
+                    continue
+                supports_search = model_supports_search(clean_id)
+                badge = " 🌐" if supports_search else ""
+                parsed_models.append({
+                    "id": clean_id,
+                    "name": name,
+                    "display_name": f"{display_name}{badge}",
+                    "supports_search": supports_search,
+                    "description": m.description or "",
+                })
+            def _model_sort_key(item: Dict[str, Any]):
+                mid = item["id"].lower()
+                priorities = [
+                    "gemini-2.5-flash",
+                    "gemini-2.5-pro",
+                    "gemini-2.5-flash-lite",
+                    "gemini-2.0-flash",
+                    "gemini-2.0-flash-lite",
+                    "gemini-1.5-flash",
+                    "gemini-1.5-pro",
+                ]
+                for idx, p in enumerate(priorities):
+                    if mid == p:
+                        return (0, idx, mid)
+                if "2.5" in mid and "flash" in mid and "native" not in mid and "tts" not in mid:
+                    return (1, 0, mid)
+                if "2.5" in mid and "pro" in mid and "tts" not in mid:
+                    return (1, 1, mid)
+                if "2.0" in mid and "flash" in mid:
+                    return (2, 0, mid)
+                if "flash" in mid:
+                    return (3, 0, mid)
+                if "pro" in mid:
+                    return (3, 1, mid)
+                return (4, 0, mid)
+
+            parsed_models.sort(key=_model_sort_key)
+            return parsed_models
+        except Exception as e:
+            gemini_logger.error(f"Ошибка получения списка моделей Gemini: {e}")
+            fallback = []
+            for mid, meta in MODELS_METADATA.items():
+                supports_search = meta.get("supports_search", False)
+                badge = " 🌐" if supports_search else ""
+                fallback.append({
+                    "id": mid,
+                    "name": f"models/{mid}",
+                    "display_name": f"{mid}{badge}",
+                    "supports_search": supports_search,
+                    "description": "",
+                })
+            return fallback
+
+    async def generate_stream(
+        self,
+        model_id: str = DEFAULT_MODEL_ID,
+        contents: Optional[List[Any]] = None,
+        system_instruction: Optional[str] = None,
+        enable_search: bool = True,
+        enable_code_execution: bool = False,
+        temperature: float = 0.8,
+        max_output_tokens: int = 24576,
+        thinking_budget: Optional[int] = None,
+        prompt: Optional[str] = None,
+    ):
+        """Асинхронный стриминг ответов с авто-fallback и поддержкой tools."""
+        self.fallback_model = None
+        if contents is None and prompt is not None:
+            contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt)])]
+        elif contents is None:
+            contents = []
+
+        tools = []
+        if enable_search and model_supports_search(model_id):
+            tools.append(types.Tool(google_search=types.GoogleSearch()))
+        if enable_code_execution and model_supports_search(model_id):
+            tools.append(types.Tool(code_execution=types.ToolCodeExecution()))
+        tools_config = tools if tools else None
+
+        clean_model = model_id.lower().replace("models/", "")
+        is_thinking_model = ("gemini-2.5-" in clean_model or "gemini-3." in clean_model) and "-lite" not in clean_model
+        thinking_config = (
+            types.ThinkingConfig(thinking_budget=thinking_budget, include_thoughts=True)
+            if (thinking_budget is not None and is_thinking_model)
+            else None
+        )
+
+        config = types.GenerateContentConfig(
+            temperature=temperature,
+            top_p=1.0,
+            max_output_tokens=max_output_tokens,
+            system_instruction=system_instruction,
+            tools=tools_config,
+            thinking_config=thinking_config,
+        )
+
+        def _extract_chunk_content(c: Any) -> str:
+            parts_text = []
+            if getattr(c, "text", None):
+                t = c.text
+                if "<tool_code" not in t and "google_search.search" not in t:
+                    parts_text.append(t)
+            candidates = getattr(c, "candidates", None) or []
+            for cand in candidates:
+                content = getattr(cand, "content", None)
+                if content and getattr(content, "parts", None):
+                    for part in content.parts:
+                        exec_code = getattr(part, "executable_code", None)
+                        if exec_code and getattr(exec_code, "code", None):
+                            code_str = exec_code.code.strip()
+                            parts_text.append(f"\n```python\n{code_str}\n```\n")
+                        exec_res = getattr(part, "code_execution_result", None)
+                        if exec_res and getattr(exec_res, "output", None):
+                            out_str = exec_res.output.strip()
+                            parts_text.append(f"\n```\n[Вывод песочницы / Output]:\n{out_str}\n```\n")
+            return "".join(parts_text)
+
+        try:
+            stream = await self.client.aio.models.generate_content_stream(
+                model=model_id,
+                contents=contents,
+                config=config,
+            )
+            async for chunk in stream:
+                if getattr(chunk, "usage_metadata", None):
+                    self.last_usage_metadata = {
+                        "prompt_tokens": getattr(chunk.usage_metadata, "prompt_token_count", 0) or 0,
+                        "candidates_tokens": getattr(chunk.usage_metadata, "candidates_token_count", 0) or 0,
+                        "total_tokens": getattr(chunk.usage_metadata, "total_token_count", 0) or 0,
+                    }
+                content_str = _extract_chunk_content(chunk)
+                if content_str:
+                    chunk_obj = StreamChunk(content_str)
+                    chunk_obj.usage_metadata = getattr(chunk, "usage_metadata", None)
+                    yield chunk_obj
+
+        except APIError as e:
+            err_msg = str(e)
+            gemini_logger.warning(f"Gemini APIError ({e.code}): {err_msg}")
+
+            if e.code == 429 or "RESOURCE_EXHAUSTED" in err_msg:
+                # Fallback to flash-lite
+                if model_id != "gemini-2.5-flash-lite":
+                    gemini_logger.warning("Quota exceeded. Fallback to gemini-2.5-flash-lite...")
+                    fallback_config = types.GenerateContentConfig(
+                        temperature=temperature,
+                        max_output_tokens=max_output_tokens,
+                        system_instruction=system_instruction,
+                    )
+                    stream = await self.client.aio.models.generate_content_stream(
+                        model="gemini-2.5-flash-lite",
+                        contents=contents,
+                        config=fallback_config,
+                    )
+                    self.fallback_model = "gemini-2.5-flash-lite"
+                    async for chunk in stream:
+                        if getattr(chunk, "usage_metadata", None):
+                            self.last_usage_metadata = {
+                                "prompt_tokens": getattr(chunk.usage_metadata, "prompt_token_count", 0) or 0,
+                                "candidates_tokens": getattr(chunk.usage_metadata, "candidates_token_count", 0) or 0,
+                                "total_tokens": getattr(chunk.usage_metadata, "total_token_count", 0) or 0,
+                            }
+                        content_str = _extract_chunk_content(chunk)
+                        if content_str:
+                            chunk_obj = StreamChunk(content_str)
+                            chunk_obj.usage_metadata = getattr(chunk, "usage_metadata", None)
+                            yield chunk_obj
+                    return
+                else:
+                    raise GeminiQuotaExceededException("Превышена квота запросов (429). Попробуйте позже.")
+
+            if "tool" in err_msg.lower() and ("not supported" in err_msg.lower() or "invalid" in err_msg.lower()):
+                clean_id = model_id.lower().replace("models/", "")
+                KNOWN_NO_SEARCH_MODELS.add(clean_id)
+                gemini_logger.warning(f"Tools not supported on {model_id}. Retrying without tools...")
+                retry_config = types.GenerateContentConfig(
+                    temperature=temperature,
+                    top_p=1.0,
+                    max_output_tokens=max_output_tokens,
+                    system_instruction=system_instruction,
+                    tools=None,
+                    thinking_config=thinking_config,
+                )
+                stream = await self.client.aio.models.generate_content_stream(
+                    model=model_id,
+                    contents=contents,
+                    config=retry_config,
+                )
+                async for chunk in stream:
+                    if getattr(chunk, "usage_metadata", None):
+                        self.last_usage_metadata = {
+                            "prompt_tokens": getattr(chunk.usage_metadata, "prompt_token_count", 0) or 0,
+                            "candidates_tokens": getattr(chunk.usage_metadata, "candidates_token_count", 0) or 0,
+                            "total_tokens": getattr(chunk.usage_metadata, "total_token_count", 0) or 0,
+                        }
+                    if chunk.text:
+                        chunk_obj = StreamChunk(chunk.text)
+                        chunk_obj.usage_metadata = getattr(chunk, "usage_metadata", None)
+                        yield chunk_obj
+                return
+
+            raise GeminiAPIException(f"Gemini API Error: {err_msg}", status_code=e.code)
+        except Exception as e:
+            gemini_logger.exception(f"Unexpected error during streaming: {e}")
+            raise GeminiAPIException(f"Ошибка генерации: {str(e)}")
+
+    async def count_tokens(self, model_id: str, contents: List[Any]) -> int:
+        """Подсчитывает токены в содержимом."""
+        try:
+            resp = await self.client.aio.models.count_tokens(model=model_id, contents=contents)
+            return resp.total_tokens or 0
+        except Exception as e:
+            gemini_logger.error(f"Error counting tokens: {e}")
+            total_chars = sum(len(str(c)) for c in contents)
+            return max(1, total_chars // 4)
+
+
 class GeminiAPIError(Exception):
-    """Кастомное исключение для ошибок Gemini API."""
+    """Кастомное исключение для ошибок Gemini API (обратная совместимость)."""
     def __init__(self, message: str, details: Optional[Dict] = None):
         super().__init__(message)
         self.details = details or {}
@@ -353,7 +643,19 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
         raise
 
 async def generate_content_simple(api_key: str, prompt: str) -> str:
-    """Генерирует ответ от Gemini без истории. Выбрасывает GeminiAPIError."""
+    """Генерирует ответ от Gemini без истории через официальный SDK google-genai с отказоустойчивым fallback."""
+    try:
+        client = genai.Client(api_key=api_key)
+        response = await client.aio.models.generate_content(
+            model=DEFAULT_MODEL_ID,
+            contents=prompt,
+        )
+        if response and response.text:
+            return response.text.strip()
+    except Exception as e:
+        gemini_logger.warning(f"SDK generate_content_simple warning: {e}. Attempting REST fallback...")
+
+    # Fallback to direct HTTP request
     url = f"{GEMINI_API_BASE_URL}/models/{DEFAULT_MODEL_ID}:generateContent"
     payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
     response_json = await _make_gemini_request_async(api_key, url, payload, 'POST')
