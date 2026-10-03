@@ -11,6 +11,7 @@ from typing import Optional
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types
 from telebot import apihelper
+from telebot.asyncio_helper import ApiTelegramException
 
 from langchain.text_splitter import MarkdownTextSplitter
 import telegramify_markdown
@@ -77,8 +78,8 @@ async def send_long_message(bot: AsyncTeleBot, chat_id: int, text: str, **kwargs
     if not text:
         return
 
-    # Максимальная длина чанка, оставляем небольшой запас.
-    CHUNK_SIZE = 4000
+    # Максимальная длина чанка, оставляем достаточный запас для MarkdownV2-экранирования.
+    CHUNK_SIZE = 3200
     final_chunks = []
 
     # Шаг 1: Разделяем текст на обычные куски и блоки кода.
@@ -99,7 +100,7 @@ async def send_long_message(bot: AsyncTeleBot, chat_id: int, text: str, **kwargs
                     lang_tag = lang if lang else ""
                     
                     # Делим сам код на части, оставляя место для ``` обертки
-                    code_splitter = MarkdownTextSplitter(chunk_size=CHUNK_SIZE - 10, chunk_overlap=0)
+                    code_splitter = MarkdownTextSplitter(chunk_size=CHUNK_SIZE - 20, chunk_overlap=0)
                     sub_chunks = code_splitter.split_text(code_content)
                     for sub_chunk in sub_chunks:
                         final_chunks.append(f"```{lang_tag}\n{sub_chunk.strip()}\n```")
@@ -136,21 +137,29 @@ async def send_long_message(bot: AsyncTeleBot, chat_id: int, text: str, **kwargs
         try:
             # Форматируем каждую готовую часть с помощью markdownify
             formatted_chunk = telegramify_markdown.markdownify(chunk)
+            # Проверяем, не превысил ли экранированный чанк лимит Telegram (4096)
+            if len(formatted_chunk) > 4000:
+                raise ValueError(f"Formatted chunk length ({len(formatted_chunk)}) exceeds Telegram limit")
+
             await bot.send_message(
                 chat_id,
                 formatted_chunk,
                 parse_mode='MarkdownV2',
                 **current_kwargs
             )
-        except apihelper.ApiException as e:
-            logger.error(
+        except (apihelper.ApiException, ApiTelegramException, Exception) as e:
+            logger.warning(
                 f"Ошибка отправки MarkdownV2 части user_id {chat_id}: {e}. "
                 f"Попытка отправки как простого текста. Текст части: '{chunk[:100]}...'",
                 extra={'user_id': str(chat_id)}
             )
             try:
-                # В случае ошибки, отправляем "сырой" chunk как простой текст
-                await bot.send_message(chat_id, chunk, parse_mode=None, **current_kwargs)
+                # В случае ошибки, отправляем chunk как простой текст (нарезая частями по 3800, если сам chunk велик)
+                if len(chunk) > 4000:
+                    for sub in [chunk[j:j+3800] for j in range(0, len(chunk), 3800)]:
+                        await bot.send_message(chat_id, sub, parse_mode=None, **current_kwargs)
+                else:
+                    await bot.send_message(chat_id, chunk, parse_mode=None, **current_kwargs)
             except Exception as fallback_e:
                 logger.error(f"Резервный механизм отправки (простой текст) также не сработал для user_id {chat_id}: {fallback_e}", extra={'user_id': str(chat_id)})
         
@@ -233,7 +242,7 @@ async def edit_message_text_safe(bot: AsyncTeleBot, chat_id: int, message_id: in
         formatted_text = telegramify_markdown.markdownify(text)
         kwargs['parse_mode'] = 'MarkdownV2'
         await bot.edit_message_text(formatted_text, chat_id, message_id, **kwargs)
-    except apihelper.ApiException as e:
+    except (apihelper.ApiException, ApiTelegramException) as e:
         if "message is not modified" in str(e).lower():
             logger.debug(f"Сообщение {message_id} не было изменено (текст совпадает).", extra={'user_id': str(chat_id)})
         else:
@@ -245,11 +254,14 @@ async def edit_message_text_safe(bot: AsyncTeleBot, chat_id: int, message_id: in
                 # В случае ошибки отправляем как простой текст
                 kwargs.pop('parse_mode', None)
                 await bot.edit_message_text(text, chat_id, message_id, **kwargs)
-            except apihelper.ApiException as fallback_e:
-                logger.error(
-                    f"Не удалось отредактировать сообщение {message_id} даже без форматирования: {fallback_e}",
-                    extra={'user_id': str(chat_id)}
-                )
+            except (apihelper.ApiException, ApiTelegramException, Exception) as fallback_e:
+                if "message is not modified" in str(fallback_e).lower():
+                    logger.debug(f"Сообщение {message_id} не было изменено при fallback.", extra={'user_id': str(chat_id)})
+                else:
+                    logger.error(
+                        f"Не удалось отредактировать сообщение {message_id} даже без форматирования: {fallback_e}",
+                        extra={'user_id': str(chat_id)}
+                    )
 
 
 async def edit_message_reply_markup_safe(bot: AsyncTeleBot, chat_id: int, message_id: int, reply_markup=None):
@@ -264,8 +276,11 @@ async def edit_message_reply_markup_safe(bot: AsyncTeleBot, chat_id: int, messag
     """
     try:
         await bot.edit_message_reply_markup(chat_id=chat_id, message_id=message_id, reply_markup=reply_markup)
-    except apihelper.ApiException as e:
-        logger.debug(f"Не удалось отредактировать клавиатуру у сообщения {message_id}: {e}", extra={'user_id': str(chat_id)})
+    except (apihelper.ApiException, ApiTelegramException) as e:
+        if "message is not modified" in str(e).lower():
+            logger.debug(f"Клавиатура у сообщения {message_id} не изменилась.", extra={'user_id': str(chat_id)})
+        else:
+            logger.debug(f"Не удалось отредактировать клавиатуру у сообщения {message_id}: {e}", extra={'user_id': str(chat_id)})
 
 
 # --- ОБЩАЯ ФУНКЦИЯ ДЛЯ АДМИНКИ ---

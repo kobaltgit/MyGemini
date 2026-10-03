@@ -239,7 +239,11 @@ async def _handle_state_translate(message: types.Message, bot: AsyncTeleBot):
         if translated_text:
             await bot.reply_to(message, translated_text)
     except GeminiAPIError as e:
-        user_friendly_error = loc.get_text(e.error_key, lang_code)
+        raw_error_text = loc.get_text(e.error_key, lang_code)
+        try:
+            user_friendly_error = raw_error_text.format(model_name=DEFAULT_MODEL_ID)
+        except Exception:
+            user_friendly_error = raw_error_text
         await bot.reply_to(message, user_friendly_error)
     finally:
         await bot.delete_state(user_id, message.chat.id)
@@ -383,7 +387,11 @@ async def _handle_no_state_message(message: types.Message, bot: AsyncTeleBot):
 
     except GeminiAPIError as e:
         user_model = await db_manager.get_user_gemini_model(user_id) or DEFAULT_MODEL_ID
-        user_friendly_error = loc.get_text(e.error_key, lang_code).format(model_name=user_model)
+        raw_error_text = loc.get_text(e.error_key, lang_code)
+        try:
+            user_friendly_error = raw_error_text.format(model_name=user_model)
+        except Exception:
+            user_friendly_error = raw_error_text
         error_markup = mk.create_error_report_button()
         await tg_helpers.send_long_message(bot, user_id, user_friendly_error, reply_markup=error_markup)
         

@@ -267,15 +267,50 @@ async def generate_response(user_id: int, prompt: Union[str, List[Union[str, PIL
         )
         # --- КОНЕЦ БЛОКА ЛОГИРОВАНИЯ ---
 
-        if not response_json or "candidates" not in response_json:
-            raise GeminiAPIError("Ответ API не содержит 'candidates'.", details=response_json)
+        if not response_json:
+            raise GeminiAPIError("Получен пустой ответ от API.", details={"error": {"message": "empty_response"}})
 
-        first_candidate = response_json["candidates"][0]
+        # Проверяем, заблокирован ли сам промпт фильтрами безопасности Google
+        prompt_feedback = response_json.get("promptFeedback")
+        if isinstance(prompt_feedback, dict) and prompt_feedback.get("blockReason"):
+            block_reason = prompt_feedback["blockReason"]
+            raise GeminiAPIError(
+                f"Запрос заблокирован фильтрами безопасности Google ({block_reason}).",
+                details={"finish_reason": block_reason}
+            )
 
-        if first_candidate.get("finishReason") == "SAFETY":
-             raise GeminiAPIError("Ответ заблокирован настройками безопасности.", details={"finish_reason": "SAFETY"})
+        candidates = response_json.get("candidates")
+        if not candidates or not isinstance(candidates, list):
+            raise GeminiAPIError("Ответ API не содержит кандидатов ('candidates').", details=response_json)
 
-        response_text = "".join(part.get("text", "") for part in first_candidate["content"]["parts"]).strip()  
+        first_candidate = candidates[0]
+        finish_reason = first_candidate.get("finishReason")
+
+        if finish_reason in ("SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII"):
+            raise GeminiAPIError(
+                f"Ответ заблокирован настройками безопасности ({finish_reason}).",
+                details={"finish_reason": "SAFETY"}
+            )
+        elif finish_reason == "RECITATION":
+            raise GeminiAPIError(
+                "Ответ заблокирован из-за ограничений на цитирование (RECITATION).",
+                details={"finish_reason": "RECITATION"}
+            )
+
+        # Безопасно извлекаем контент и части ответа
+        candidate_content = first_candidate.get("content") or {}
+        parts = candidate_content.get("parts") or []
+        response_text = "".join(
+            part.get("text", "") for part in parts if isinstance(part, dict)
+        ).strip()
+
+        if not response_text:
+            if finish_reason and finish_reason != "STOP":
+                raise GeminiAPIError(
+                    f"Генерация завершена без текста (причина: {finish_reason}).",
+                    details={"finish_reason": finish_reason}
+                )
+            raise GeminiAPIError("Модель вернула пустой ответ без текста.", details={"error": {"message": "empty_response"}})
               
         # Извлекаем источники из метаданных
         sources = []
@@ -323,7 +358,23 @@ async def generate_content_simple(api_key: str, prompt: str) -> str:
     payload = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
     response_json = await _make_gemini_request_async(api_key, url, payload, 'POST')
     try:
-        return response_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+        candidates = response_json.get("candidates") or []
+        if not candidates:
+            raise GeminiAPIError("Ответ API не содержит 'candidates'.", details=response_json)
+        first_candidate = candidates[0]
+        finish_reason = first_candidate.get("finishReason")
+        if finish_reason in ("SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII"):
+            raise GeminiAPIError("Ответ заблокирован настройками безопасности.", details={"finish_reason": "SAFETY"})
+        elif finish_reason == "RECITATION":
+            raise GeminiAPIError("Ответ заблокирован (RECITATION).", details={"finish_reason": "RECITATION"})
+
+        parts = first_candidate.get("content", {}).get("parts", [])
+        text = "".join(part.get("text", "") for part in parts if isinstance(part, dict)).strip()
+        if not text:
+            raise GeminiAPIError("Модель вернула пустой ответ.", details={"error": {"message": "empty_response"}})
+        return text
+    except GeminiAPIError:
+        raise
     except (KeyError, IndexError) as e:
         raise GeminiAPIError(f"Ошибка чтения ответа от API: {e}", details={"error": {"message": "parsing_error"}})
 

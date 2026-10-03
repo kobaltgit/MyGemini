@@ -101,6 +101,6 @@ loggers:
 
 # Настройки для корневого логгера
 root:
-  level: INFO
+  level: WARNING
   # Используем обработчик с фильтром, на случай если какой-то логгер не настроен и провалится в root
   handlers: [console, file_general]
