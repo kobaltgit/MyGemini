@@ -57,6 +57,22 @@ def model_supports_search(model_name: str) -> bool:
     return clean_name.startswith("gemini-")
 
 
+def model_supports_code_execution(model_name: str) -> bool:
+    """Определяет, поддерживает ли модель инструмент Python Code Execution (Sandbox)."""
+    if not model_name:
+        return False
+    clean_name = model_name.lower().replace("models/", "").strip()
+    if clean_name.startswith("gemma"):
+        return False
+    no_code_patterns = [
+        "-image", "-tts", "-transcribe", "embedding", "aqa", "veo", "lyria", "robotics"
+    ]
+    if any(p in clean_name for p in no_code_patterns):
+        return False
+    return clean_name.startswith("gemini-")
+
+
+
 class GeminiAPIException(Exception):
     """Базовое исключение для ошибок Gemini API нового SDK."""
     def __init__(self, message: str, status_code: Optional[int] = None, details: Optional[Dict] = None):
@@ -177,7 +193,7 @@ class GeminiService:
         tools = []
         if enable_search and model_supports_search(model_id):
             tools.append(types.Tool(google_search=types.GoogleSearch()))
-        if enable_code_execution and model_supports_search(model_id):
+        if enable_code_execution and model_supports_code_execution(model_id):
             tools.append(types.Tool(code_execution=types.ToolCodeExecution()))
         tools_config = tools if tools else None
 
@@ -246,13 +262,21 @@ class GeminiService:
                 # Fallback to flash-lite
                 if model_id != "gemini-2.5-flash-lite":
                     gemini_logger.warning("Quota exceeded. Fallback to gemini-2.5-flash-lite...")
+                    fallback_tools = []
+                    fallback_model_id = "gemini-2.5-flash-lite"
+                    if enable_search and model_supports_search(fallback_model_id):
+                        fallback_tools.append(types.Tool(google_search=types.GoogleSearch()))
+                    if enable_code_execution and model_supports_code_execution(fallback_model_id):
+                        fallback_tools.append(types.Tool(code_execution=types.ToolCodeExecution()))
+
                     fallback_config = types.GenerateContentConfig(
                         temperature=temperature,
                         max_output_tokens=max_output_tokens,
                         system_instruction=system_instruction,
+                        tools=fallback_tools if fallback_tools else None,
                     )
                     stream = await self.client.aio.models.generate_content_stream(
-                        model="gemini-2.5-flash-lite",
+                        model=fallback_model_id,
                         contents=contents,
                         config=fallback_config,
                     )
