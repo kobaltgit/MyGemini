@@ -23,7 +23,7 @@ from config.settings import (
 from database import db_manager
 from utils import localization as loc
 from utils import guide_manager
-from utils.text_helpers import split_text_by_chunks
+from utils.text_helpers import split_text_by_chunks, markdown_to_telegram_html
 from features import personal_account
 from keyboards.aiogram_reply import create_main_keyboard
 from keyboards.aiogram_inline import (
@@ -137,13 +137,16 @@ async def cmd_help_guide(message: Message):
     await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
-    guide_text = guide_manager.get_full_guide(lang_code)
-    chunks = split_text_by_chunks(guide_text, max_chars=3500)
+    raw_guide_text = guide_manager.get_full_guide(lang_code)
+    formatted_html = markdown_to_telegram_html(raw_guide_text)
+    chunks = split_text_by_chunks(formatted_html, max_chars=3500)
     for chunk in chunks:
         try:
-            await message.answer(chunk, parse_mode="Markdown")
-        except Exception:
-            await message.answer(chunk)
+            await message.answer(chunk, parse_mode="HTML")
+        except Exception as e:
+            logger.warning(f"Failed to send guide chunk with HTML ({e}), retrying plain text")
+            plain_chunk = re.sub(r'<[^>]+>', '', chunk)
+            await message.answer(plain_chunk)
 
 
 @router.message(Command("apikey_info", "key_info"))
@@ -154,13 +157,16 @@ async def cmd_apikey_info(message: Message):
     await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
     lang_code = await db_manager.get_user_language(user_id)
 
-    guide_text = guide_manager.get_guide_section('API_KEY', lang_code)
-    chunks = split_text_by_chunks(guide_text, max_chars=3500)
+    raw_guide_text = guide_manager.get_guide_section('API_KEY', lang_code)
+    formatted_html = markdown_to_telegram_html(raw_guide_text)
+    chunks = split_text_by_chunks(formatted_html, max_chars=3500)
     for chunk in chunks:
         try:
-            await message.answer(chunk, parse_mode="Markdown")
-        except Exception:
-            await message.answer(chunk)
+            await message.answer(chunk, parse_mode="HTML")
+        except Exception as e:
+            logger.warning(f"Failed to send API key info chunk with HTML ({e}), retrying plain text")
+            plain_chunk = re.sub(r'<[^>]+>', '', chunk)
+            await message.answer(plain_chunk)
 
 
 @router.message(Command("set_api_key", "setapikey"))

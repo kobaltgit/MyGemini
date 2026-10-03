@@ -10,16 +10,20 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
            "Если ты не знаешь, что это и как его получить, воспользуйся новой подробной командой: /apikey_info\n\n"
            "✅ После установки ключа через /set_api_key ты сможешь полноценно общаться со мной.\n\n"
            "Используй /help_guide, чтобы увидеть полный список моих возможностей.",
-        'cmd_help_text': "🆘 *Краткая справка по командам*\n\n"
-                 "*/start* - Перезапустить бота.\n"
-                 "*/reset* - Сбросить контекст текущего диалога.\n"
-                 "*/set_api_key* - Установить или обновить API ключ.\n"
-                 "*/settings* - Открыть меню настроек.\n"
-                 "*/dialogs* - Управление диалогами.\n"
-                 "*/history* - Посмотреть историю сообщений.\n"
-                 "*/usage* - Статистика расходов токенов.\n\n"
-                 "➡️ Используй /help_guide для получения **полного руководства** по всем функциям.\n"
-                 "🔑 Используй /apikey_info для получения инструкции по **созданию API ключа**.",
+        'cmd_help_text': (
+            "🆘 <b>Краткая справка по командам:</b>\n\n"
+            "• <code>/start</code> — Перезапустить бота\n"
+            "• <code>/reset</code> — Сбросить контекст диалога\n"
+            "• <code>/set_api_key</code> — Установить/обновить API-ключ\n"
+            "• <code>/settings</code> — Меню настроек\n"
+            "• <code>/dialogs</code> — Управление диалогами\n"
+            "• <code>/history</code> — История сообщений по календарю\n"
+            "• <code>/usage</code> — Статистика расходов токенов\n"
+            "• <code>/translate</code> — Быстрый переводчик\n"
+            "• <code>/account</code> — Личный кабинет\n\n"
+            "➡️ <code>/help_guide</code> — <b>Полное руководство</b> по всем возможностям\n"
+            "🔑 <code>/apikey_info</code> — Инструкция по созданию <b>API-ключа</b>"
+        ),
         # --- Настройки ---
         'settings_title': "⚙️ *Настройки бота*",
         'settings_style_section': "--- Стиль общения бота ---",
@@ -200,16 +204,20 @@ LOCALIZATION: Dict[str, Dict[str, str]] = {
            "If you don't know what it is or how to get it, use the new detailed command: /apikey_info\n\n"
            "✅ After setting the key via /set_api_key, you'll be able to chat with me.\n\n"
            "Use /help_guide to see a full list of my features.",
-        'cmd_help_text': "🆘 *Quick Command Reference*\n\n"
-                 "*/start* - Restart the bot.\n"
-                 "*/reset* - Clear the current dialog context.\n"
-                 "*/set_api_key* - Set or update your API key.\n"
-                 "*/settings* - Open the settings menu.\n"
-                 "*/dialogs* - Manage your dialogs.\n"
-                 "*/history* - View message history.\n"
-                 "*/usage* - Token usage statistics.\n\n"
-                 "➡️ Use /help_guide for the **full user manual**.\n"
-                 "🔑 Use /apikey_info for instructions on **creating an API key**.",
+        'cmd_help_text': (
+            "🆘 <b>Quick Command Reference:</b>\n\n"
+            "• <code>/start</code> — Restart the bot\n"
+            "• <code>/reset</code> — Clear dialogue context\n"
+            "• <code>/set_api_key</code> — Set or update API key\n"
+            "• <code>/settings</code> — Open settings menu\n"
+            "• <code>/dialogs</code> — Manage dialogues\n"
+            "• <code>/history</code> — View message history\n"
+            "• <code>/usage</code> — Token usage & cost statistics\n"
+            "• <code>/translate</code> — Built-in translator\n"
+            "• <code>/account</code> — Personal account\n\n"
+            "➡️ <code>/help_guide</code> — <b>Full user manual</b> with all features\n"
+            "🔑 <code>/apikey_info</code> — Instructions on creating an <b>API key</b>"
+        ),
         # --- Settings ---
         'settings_title': "⚙️ *Bot Settings*",
         'settings_style_section': "--- Bot Communication Style ---",

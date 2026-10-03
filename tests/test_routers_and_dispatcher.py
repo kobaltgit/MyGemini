@@ -119,13 +119,55 @@ async def test_guides_content_and_commands():
 
     await cmd_help_guide(mock_msg)
     assert mock_msg.answer.called
-    assert any("gemini-2.5-flash" in str(c) for c in mock_msg.answer.call_args_list)
+    for call in mock_msg.answer.call_args_list:
+        text_arg = call.args[0] if call.args else call.kwargs.get("text", "")
+        # Must not contain raw markdown headers or section tags
+        assert "###" not in text_arg
+        assert "# [НАЧАЛО" not in text_arg
+        assert "# [КОНЕЦ" not in text_arg
+        assert "<b>" in text_arg
 
     # Test /apikey_info handler
     mock_msg.answer.reset_mock()
     await cmd_apikey_info(mock_msg)
     assert mock_msg.answer.called
-    assert any("aistudio.google.com" in str(c) for c in mock_msg.answer.call_args_list)
+    for call in mock_msg.answer.call_args_list:
+        text_arg = call.args[0] if call.args else call.kwargs.get("text", "")
+        assert "###" not in text_arg
+        assert "<b>" in text_arg
+        assert "<a href=" in text_arg
+
+
+def test_markdown_to_telegram_html():
+    """Verify markdown to telegram HTML converter handles all elements cleanly."""
+    from utils.text_helpers import markdown_to_telegram_html
+
+    sample_md = (
+        "# [НАЧАЛО РАЗДЕЛА: TEST]\n\n"
+        "### 🚀 Заголовок 1\n\n"
+        "Обычный текст с **жирным шрифтом** и *курсивом*, а также `кодом`.\n\n"
+        "* Пункт 1\n"
+        "* Пункт 2 с **акцентом**\n\n"
+        "Ссылка: [Google](https://google.com)\n"
+        "Картинка: ![Скриншот](https://example.com/pic.png)\n\n"
+        "```python\nprint('hello')\n```\n\n"
+        "# [КОНЕЦ РАЗДЕЛА: TEST]"
+    )
+
+    html_out = markdown_to_telegram_html(sample_md)
+    assert "# [НАЧАЛО" not in html_out
+    assert "# [КОНЕЦ" not in html_out
+    assert "###" not in html_out
+    assert "<b>🚀 Заголовок 1</b>" in html_out
+    assert "<b>жирным шрифтом</b>" in html_out
+    assert "<i>курсивом</i>" in html_out
+    assert "<code>кодом</code>" in html_out
+    assert "• Пункт 1" in html_out
+    assert "• Пункт 2 с <b>акцентом</b>" in html_out
+    assert '<a href="https://google.com">Google</a>' in html_out
+    assert '🖼 <a href="https://example.com/pic.png">Скриншот</a>' in html_out
+    assert "<pre><code>print('hello')</code></pre>" in html_out
+
 
 
 
