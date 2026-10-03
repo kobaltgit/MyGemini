@@ -444,7 +444,11 @@ async def generate_and_stream_response(
         header_style=header_style,
         thinking_summary="Размышления" if lang_code == "ru" else "Thinking",
         stop_keyboard=get_streaming_stop_keyboard(lang_code),
-        quick_actions_keyboard=get_chat_quick_actions_keyboard(lang_code, dialog_id=active_dialog_id, enable_code_execution=True),
+        quick_actions_keyboard=get_chat_quick_actions_keyboard(
+            lang_code,
+            dialog_id=active_dialog_id,
+            enable_code_execution=bool(settings.get("enable_code_execution", 0)),
+        ),
     )
     active_streams[chat_id] = throttler
 

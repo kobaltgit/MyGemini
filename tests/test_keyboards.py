@@ -60,11 +60,18 @@ def test_main_reply_keyboard_admin_user():
 
 def test_inline_quick_actions_and_stop():
     """Verify quick actions and stop keyboard buttons."""
-    quick_kb = get_chat_quick_actions_keyboard(lang_code="ru", dialog_id=42)
+    # When enabled (default)
+    quick_kb = get_chat_quick_actions_keyboard(lang_code="ru", dialog_id=42, enable_code_execution=True)
     assert isinstance(quick_kb, InlineKeyboardMarkup)
     assert any("chat_action:regen" in btn.callback_data for row in quick_kb.inline_keyboard for btn in row)
     assert any("chat_action:undo" in btn.callback_data for row in quick_kb.inline_keyboard for btn in row)
+    assert any("chat_action:sandbox" in btn.callback_data for row in quick_kb.inline_keyboard for btn in row)
     assert any("dialog_export:42" in btn.callback_data for row in quick_kb.inline_keyboard for btn in row)
+
+    # When disabled
+    quick_kb_no_code = get_chat_quick_actions_keyboard(lang_code="ru", dialog_id=42, enable_code_execution=False)
+    assert not any("chat_action:sandbox" in btn.callback_data for row in quick_kb_no_code.inline_keyboard for btn in row)
+    assert any("dialog_export:42" in btn.callback_data for row in quick_kb_no_code.inline_keyboard for btn in row)
 
     stop_kb = get_streaming_stop_keyboard(lang_code="ru")
     assert any(btn.callback_data == "chat_action:stop" for row in stop_kb.inline_keyboard for btn in row)
