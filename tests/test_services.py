@@ -61,3 +61,36 @@ def test_gemini_service_model_support():
     assert service.api_key == "AIzaSyTestFakeKey"
     assert hasattr(service, "generate_stream")
     assert hasattr(service, "count_tokens")
+
+
+def test_normalize_web_markup():
+    """Verify conversion of web-only HTML tags into native Telegram tags."""
+    sample = (
+        "<details><summary><b>Заголовок</b></summary>Контент аккордеона</details>\n"
+        'Скрытый текст: <span style="cursor: pointer; color: transparent;">Секрет</span>\n'
+        "<ul><li>Пункт 1</li><li>Пункт 2</li></ul>"
+    )
+    normalized = throttler.normalize_web_markup(sample)
+
+    assert "<blockquote expandable>" in normalized
+    assert "<b>Заголовок</b>" in normalized
+    assert "<tg-spoiler>Секрет</tg-spoiler>" in normalized
+    assert "• Пункт 1" in normalized
+    assert "• Пункт 2" in normalized
+    assert "<details>" not in normalized
+    assert "<span>" not in normalized
+
+
+def test_build_system_instruction():
+    """Verify that build_system_instruction includes Telegram formatting guidelines."""
+    from handlers.routers.chat import build_system_instruction
+
+    instruction_ru = build_system_instruction("default", "default", "ru")
+    assert "Telegram" in instruction_ru
+    assert "LaTeX" in instruction_ru
+    assert "спойлер" in instruction_ru
+
+    instruction_en = build_system_instruction("default", "default", "en")
+    assert "Telegram" in instruction_en
+    assert "LaTeX" in instruction_en
+

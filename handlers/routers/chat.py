@@ -43,9 +43,31 @@ class SandboxStates(StatesGroup):
 active_streams: Dict[int, MessageStreamThrottler] = {}
 
 
-def build_system_instruction(persona_id: str, bot_style: str, lang_code: str) -> Optional[str]:
-    """Builds system prompt based on persona and style."""
-    instructions = []
+TELEGRAM_BASE_INSTRUCTION_RU = (
+    "Ты — полезный интеллектуальный ассистент в мессенджере Telegram.\n"
+    "Строгие правила разметки и форматирования текста для Telegram:\n"
+    "1. Никогда не используй HTML-теги веб-страниц (<details>, <summary>, <span>, <div>, <script>, атрибуты style/class/onmouseover).\n"
+    "2. Для спойлеров и скрытого текста используй нативный синтаксис Telegram: ||скрытый текст||.\n"
+    "3. Для математических формул ВСЕГДА используй синтаксис LaTeX, обёрнутый в знаки доллара: $...$ для строчных формул (например, $E = mc^2$) или $$...$$ для отдельных выключных блоков формул.\n"
+    "4. Для таблиц используй стандартный Markdown (| Заголовок 1 | Заголовок 2 |).\n"
+    "5. Для блоков кода используй тройные кавычки с языком: ```python ... ```."
+)
+
+TELEGRAM_BASE_INSTRUCTION_EN = (
+    "You are a helpful assistant in the Telegram messenger.\n"
+    "Strict Telegram text formatting rules:\n"
+    "1. Never use web-browser HTML tags (<details>, <summary>, <span>, <div>, <script>, or style/class/onmouseover attributes).\n"
+    "2. For spoilers and hidden text, use native Telegram syntax: ||hidden text||.\n"
+    "3. For mathematical formulas, ALWAYS use LaTeX wrapped in dollar signs: $...$ for inline (e.g. $E = mc^2$) or $$...$$ for block formulas.\n"
+    "4. For tables, use standard Markdown (| Header 1 | Header 2 |).\n"
+    "5. For code blocks, use triple backticks with language tag: ```python ... ```."
+)
+
+
+def build_system_instruction(persona_id: str, bot_style: str, lang_code: str) -> str:
+    """Builds system prompt based on Telegram rules, persona and style."""
+    base = TELEGRAM_BASE_INSTRUCTION_RU if lang_code == "ru" else TELEGRAM_BASE_INSTRUCTION_EN
+    instructions = [base]
     if persona_id and persona_id != "default":
         pinfo = BOT_PERSONAS.get(persona_id, {})
         prompt = pinfo.get(f"prompt_{lang_code}", pinfo.get("prompt_ru", ""))
@@ -61,7 +83,8 @@ def build_system_instruction(persona_id: str, bot_style: str, lang_code: str) ->
         if bot_style in s_instructions:
             instructions.append(s_instructions[bot_style])
 
-    return "\n\n".join(instructions) if instructions else None
+    return "\n\n".join(instructions)
+
 
 
 # ===================================================================================

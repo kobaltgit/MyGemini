@@ -47,6 +47,50 @@ def format_markdown_safe(text: str) -> Tuple_Markdown:
         return text, None
 
 
+def normalize_web_markup(text: str) -> str:
+    """
+    Transforms accidental browser-only HTML tags (<details>, <span>, <ul>, <li>)
+    and bracket math delimiters into valid Telegram rich markup.
+    """
+    if not text:
+        return ""
+
+    # 1. Transform <details><summary>Title</summary>Body</details> -> <blockquote expandable><b>Title</b>\nBody</blockquote>
+    def details_repl(m):
+        summary = m.group(1).strip()
+        body = m.group(2).strip()
+        clean_summary = re.sub(r'</?(?:b|strong|i|em)>', '', summary)
+        return f"\n<blockquote expandable><b>{clean_summary}</b>\n{body}</blockquote>\n"
+
+    text = re.sub(
+        r"<details[^>]*>\s*<summary[^>]*>(.*?)</summary>(.*?)</details>",
+        details_repl,
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+
+    # 2. Transform pseudo-spoilers <span style="...cursor: pointer...">text</span> -> <tg-spoiler>text</tg-spoiler>
+    text = re.sub(
+        r'<span[^>]*style="[^"]*(?:cursor:\s*pointer|color:\s*transparent)[^"]*"[^>]*>(.*?)</span>',
+        r"<tg-spoiler>\1</tg-spoiler>",
+        text,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+    # Strip any remaining unallowed <span> tags
+    text = re.sub(r'</?span[^>]*>', '', text, flags=re.IGNORECASE)
+
+    # 3. Transform <ul>, <ol> and <li> to clean bullet points
+    text = re.sub(r'</?(?:ul|ol)[^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<li[^>]*>(.*?)</li>', r'• \1\n', text, flags=re.DOTALL | re.IGNORECASE)
+
+    # 4. Normalize raw LaTeX bracket delimiters \(...\) and \[...\]
+    # tg-rich-converter natively recognizes $...$ and $$...$$
+    text = re.sub(r'\\\[(.*?)\\\]', r'$$\1$$', text, flags=re.DOTALL)
+    text = re.sub(r'\\\((.*?)\\\)', r'$\1$', text)
+
+    return text
+
+
 class MessageStreamThrottler:
     """
     Buffers streaming AI chunks and updates Telegram message at throttled intervals.
@@ -221,8 +265,9 @@ class MessageStreamThrottler:
     ) -> None:
         """Renders and edits message using tg-rich-converter Rich Messages (10.1+)."""
         streaming_mode = not is_final
+        clean_text = normalize_web_markup(raw_text)
         rich_html = to_rich(
-            raw_text,
+            clean_text,
             thinking_summary=self.thinking_summary,
             streaming=streaming_mode,
         )
@@ -340,7 +385,8 @@ class MessageStreamThrottler:
         reply_markup: Optional[InlineKeyboardMarkup] = None,
     ) -> None:
         """Edits message using classic MarkdownV2 / plain text."""
-        display_text = raw_text if is_final else f"{raw_text} ▌"
+        clean_raw = normalize_web_markup(raw_text)
+        display_text = clean_raw if is_final else f"{clean_raw} ▌"
         formatted_text, parse_mode = format_markdown_safe(display_text)
 
         if not self.completed_messages and self.header_style == "expandable" and parse_mode == "MarkdownV2":
