@@ -13,6 +13,7 @@ Manages:
 
 from typing import Tuple
 from aiogram import Router, F
+from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -150,6 +151,7 @@ async def render_settings_view(user_id: int) -> Tuple[str, InlineKeyboardMarkup]
     return text, keyboard
 
 
+@router.message(Command("settings"))
 @router.message(F.text.in_({"⚙️ Настройки", "⚙️ Settings", "/settings"}))
 async def handle_settings_command(message: Message):
     """Opens settings view."""

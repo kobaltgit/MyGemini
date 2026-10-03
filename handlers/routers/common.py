@@ -11,6 +11,7 @@ import re
 import html
 import datetime
 from aiogram import Router, F, Bot
+from aiogram.filters import Command, CommandStart
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -21,6 +22,7 @@ from config.settings import (
 )
 from database import db_manager
 from utils import localization as loc
+from utils import guide_manager
 from utils.text_helpers import split_text_by_chunks
 from features import personal_account
 from keyboards.aiogram_reply import create_main_keyboard
@@ -81,6 +83,8 @@ async def handle_accidental_api_key(message: Message, state: FSMContext):
 # --- COMMANDS: /start, /help, /donate, /feedback ---
 # ===================================================================================
 
+@router.message(CommandStart())
+@router.message(Command("start"))
 @router.message(F.text == "/start")
 async def cmd_start(message: Message, state: FSMContext):
     """Handles /start command."""
@@ -105,6 +109,7 @@ async def cmd_start(message: Message, state: FSMContext):
     )
 
 
+@router.message(Command("help"))
 @router.message(F.text == "/help")
 async def cmd_help(message: Message):
     """Handles /help command."""
@@ -124,6 +129,98 @@ async def cmd_help(message: Message):
     )
 
 
+@router.message(Command("help_guide", "guide"))
+async def cmd_help_guide(message: Message):
+    """Handles /help_guide and /guide commands, sending full user manual."""
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
+    lang_code = await db_manager.get_user_language(user_id)
+
+    guide_text = guide_manager.get_full_guide(lang_code)
+    chunks = split_text_by_chunks(guide_text, max_chars=3500)
+    for chunk in chunks:
+        try:
+            await message.answer(chunk, parse_mode="Markdown")
+        except Exception:
+            await message.answer(chunk)
+
+
+@router.message(Command("apikey_info", "key_info"))
+async def cmd_apikey_info(message: Message):
+    """Handles /apikey_info and /key_info commands, sending Google API key instructions."""
+    user = message.from_user
+    user_id = user.id
+    await db_manager.add_or_update_user(user.id, user.username, user.first_name, user.last_name)
+    lang_code = await db_manager.get_user_language(user_id)
+
+    guide_text = guide_manager.get_guide_section('API_KEY', lang_code)
+    chunks = split_text_by_chunks(guide_text, max_chars=3500)
+    for chunk in chunks:
+        try:
+            await message.answer(chunk, parse_mode="Markdown")
+        except Exception:
+            await message.answer(chunk)
+
+
+@router.message(Command("set_api_key", "setapikey"))
+async def cmd_set_api_key(message: Message, state: FSMContext):
+    """Prompts user to send a new Gemini API key."""
+    user_id = message.from_user.id
+    await db_manager.add_or_update_user(message.from_user.id, message.from_user.username, message.from_user.first_name, message.from_user.last_name)
+    lang_code = await db_manager.get_user_language(user_id)
+    await state.set_state(CommonStates.waiting_for_api_key)
+    prompt = loc.get_text('set_api_key_prompt', lang_code)
+    await message.answer(prompt)
+
+
+@router.message(CommonStates.waiting_for_api_key)
+async def process_command_api_key(message: Message, state: FSMContext):
+    """Processes API key sent after /set_api_key command."""
+    user_id = message.from_user.id
+    raw_key = message.text.strip() if message.text else ""
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    lang_code = await db_manager.get_user_language(user_id)
+    status_msg = await message.answer(loc.get_text('api_key_verifying', lang_code))
+
+    is_valid = await gemini_service.validate_api_key(raw_key)
+    try:
+        await status_msg.delete()
+    except Exception:
+        pass
+
+    if is_valid:
+        await db_manager.set_user_api_key(user_id, raw_key)
+        active_dialog_id = await db_manager.get_active_dialog_id(user_id)
+        if active_dialog_id:
+            gemini_service.reset_dialog_chat(active_dialog_id)
+        await state.clear()
+        text = loc.get_text('api_key_success', lang_code)
+        await message.answer(text, reply_markup=create_main_keyboard(lang_code, user_id))
+    else:
+        text = loc.get_text('api_key_invalid', lang_code)
+        await message.answer(text)
+
+
+@router.message(Command("donate"))
+async def cmd_donate(message: Message):
+    """Sends project support donation link if configured."""
+    user_id = message.from_user.id
+    lang_code = await db_manager.get_user_language(user_id)
+    if DONATION_URL:
+        from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+        support_label = "☕ Поддержать проект" if lang_code == "ru" else "☕ Support project"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=support_label, url=DONATION_URL)]
+        ])
+        await message.answer(loc.get_text('support_prompt', lang_code), reply_markup=kb)
+
+
+@router.message(Command("feedback"))
 @router.message(F.text == "/feedback")
 async def cmd_feedback(message: Message, state: FSMContext):
     """Initiates user feedback submission."""
@@ -181,6 +278,7 @@ async def process_feedback(message: Message, state: FSMContext, bot: Bot):
 # ===================================================================================
 
 # 1. Личный кабинет (User Profile)
+@router.message(Command("account", "profile"))
 @router.message(F.text.in_({"👤 Личный кабинет", "👤 My Account", "/account", "/profile"}))
 async def handle_account(message: Message):
     """Renders user account info with topic analysis."""
@@ -192,6 +290,7 @@ async def handle_account(message: Message):
 
 
 # 2. Расходы (Usage)
+@router.message(Command("usage"))
 @router.message(F.text.in_({"📊 Расходы", "📊 Usage", "/usage"}))
 async def handle_usage(message: Message):
     """Calculates and displays token expenses in USD."""
@@ -233,6 +332,7 @@ async def handle_usage(message: Message):
 
 
 # 3. Перевести (Translate)
+@router.message(Command("translate"))
 @router.message(F.text.in_({"🇷🇺 Перевести", "🇬🇧 Translate", "/translate"}))
 async def handle_translate(message: Message):
     """Presents translation target language keyboard."""
@@ -286,6 +386,7 @@ async def process_translation(message: Message, state: FSMContext):
 
 
 # 4. История (History calendar)
+@router.message(Command("history"))
 @router.message(F.text.in_({"📜 История", "📜 History", "/history"}))
 async def handle_history(message: Message, state: FSMContext):
     """Displays calendar keyboard to pick date."""
@@ -426,6 +527,7 @@ async def handle_calendar_date(callback: CallbackQuery, state: FSMContext):
 
 
 # 5. Сброс (Reset context)
+@router.message(Command("reset"))
 @router.message(F.text.in_({"🔄 Сброс", "🔄 Reset", "/reset"}))
 async def handle_reset(message: Message, state: FSMContext):
     """Clears context history for active dialog."""

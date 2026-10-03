@@ -8,6 +8,7 @@ Handles:
 
 import datetime
 from aiogram import Router, F
+from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, BufferedInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -34,6 +35,7 @@ class DialogStates(StatesGroup):
     waiting_for_rename = State()
 
 
+@router.message(Command("dialogs"))
 @router.message(F.text.in_({"🗂️ Диалоги", "🗂️ Dialogs", "/dialogs"}))
 async def handle_dialogs_command(message: Message):
     """Renders dialogs menu."""

@@ -92,3 +92,40 @@ async def test_notify_admin_of_new_user_aiogram():
     assert "John" in msg_text
 
 
+@pytest.mark.asyncio
+async def test_guides_content_and_commands():
+    """Verify that full guides and sections load properly and commands send them."""
+    from utils import guide_manager
+    from handlers.routers.common import cmd_help_guide, cmd_apikey_info
+
+    # Test guide loading
+    ru_guide = guide_manager.get_full_guide("ru")
+    en_guide = guide_manager.get_full_guide("en")
+    assert len(ru_guide) > 500
+    assert len(en_guide) > 500
+    assert "gemini-2.5-flash" in ru_guide
+    assert "gemini-2.5-flash" in en_guide
+
+    ru_key_section = guide_manager.get_guide_section("API_KEY", "ru")
+    en_key_section = guide_manager.get_guide_section("API_KEY", "en")
+    assert "aistudio.google.com" in ru_key_section
+    assert "aistudio.google.com" in en_key_section
+
+    # Test /help_guide handler
+    mock_msg = MagicMock()
+    mock_msg.from_user = User(id=12345, is_bot=False, first_name="Tester", username="tester")
+    mock_msg.chat = Chat(id=12345, type="private")
+    mock_msg.answer = AsyncMock()
+
+    await cmd_help_guide(mock_msg)
+    assert mock_msg.answer.called
+    assert any("gemini-2.5-flash" in str(c) for c in mock_msg.answer.call_args_list)
+
+    # Test /apikey_info handler
+    mock_msg.answer.reset_mock()
+    await cmd_apikey_info(mock_msg)
+    assert mock_msg.answer.called
+    assert any("aistudio.google.com" in str(c) for c in mock_msg.answer.call_args_list)
+
+
+

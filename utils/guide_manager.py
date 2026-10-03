@@ -59,6 +59,13 @@ def get_full_guide(lang: str = 'ru') -> str:
     Returns:
         str: Полный текст справки или строка с сообщением об ошибке.
     """
+    global _full_guide_ru, _full_guide_en
+    if _full_guide_ru is None:
+        try:
+            load_guides()
+        except Exception as e:
+            logger.error(f"Failed to lazy-load guides: {e}")
+
     if lang == 'ru' and _full_guide_ru:
         return _full_guide_ru
     if lang == 'en' and _full_guide_en:

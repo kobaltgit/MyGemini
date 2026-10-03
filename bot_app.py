@@ -44,6 +44,8 @@ def create_dispatcher() -> Dispatcher:
 async def start_bot():
     """Initializes database and runs polling loop."""
     logger.info("Initializing MyGemini v2 (aiogram 3.x)...")
+    from utils import guide_manager
+    guide_manager.load_guides()
     await db_manager.setup_database()
 
     default_props = DefaultBotProperties(parse_mode="HTML")
