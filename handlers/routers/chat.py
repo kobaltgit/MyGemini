@@ -495,6 +495,7 @@ async def generate_and_stream_response(
             "Для любых расчетов, подсчета символов, слов, частотности, сортировки, обработки списков или математических операций "
             "ты ОБЯЗАН написать и запустить исполняемый код с помощью встроенного инструмента code_execution. "
             "НИКОГДА не угадывай, не выдумывай и не симулируй вывод в тексте без фактического запуска в песочнице. "
+            "Для вычисления определенных интегралов, дифференциальных уравнений и сложных математических функций отдавай предпочтение быстрым численным библиотекам (scipy.integrate.quad, numpy, math), избегая тяжелого символьного sympy.integrate, которое может зависнуть по таймауту (KeyboardInterrupt). Если требуется аналитический ответ, выводи формулу текстом, а в коде выполняй численный расчет. "
             "Свои выводы и объяснения строй строго на базе реального вывода выполнения кода."
             if lang_code == "ru" else
             "You are a specialized Python computation engine. Your sole objective is to provide mathematically, "
@@ -502,6 +503,7 @@ async def generate_and_stream_response(
             "You MUST ALWAYS generate and execute Python code using your code_execution tool for any calculations, "
             "counting, string parsing, sorting, or data analysis. "
             "NEVER guess, estimate, or simulate results in plain text without running the code. "
+            "For definite integrals, differential equations, and complex mathematical functions, prefer fast numerical libraries (scipy.integrate.quad, numpy, math) over heavy symbolic sympy.integrate that may hang and hit sandbox execution timeouts (KeyboardInterrupt). If an analytical answer is requested, provide the symbolic formula in the text and compute the numerical value in code. "
             "Base your final explanation strictly on the actual execution output."
         )
     else:
@@ -509,10 +511,12 @@ async def generate_and_stream_response(
         if code_execution:
             code_exec_guidance = (
                 "\n\n[ВАЖНО: Доступен инструмент code_execution. При математических расчетах, "
-                "моделировании, подсчетах или анализе данных используй исполняемый код Python.]"
+                "моделировании, подсчетах или анализе данных используй исполняемый код Python. "
+                "Для определенных интегралов и сложных уравнений отдавай предпочтение scipy/numpy во избежание зависания по таймауту.]"
                 if lang_code == "ru" else
                 "\n\n[IMPORTANT: code_execution tool is available. For mathematical calculations, "
-                "simulations, counting, or data analysis, use executable Python code.]"
+                "simulations, counting, or data analysis, use executable Python code. "
+                "For definite integrals and complex equations, prefer scipy/numpy to avoid sandbox timeouts.]"
             )
             if system_instruction:
                 system_instruction += code_exec_guidance
